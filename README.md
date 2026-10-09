@@ -10,10 +10,9 @@ separable layers built on top of it.
 
 | Folder | What it is | Status |
 |---|---|---|
-| [`mcp/`](mcp/) | MCP server: a link-safety gate for AI agents (`check_link`, `deep_check`) | Working |
-| `explain/` | Grounded plain-language explanations with an NVIDIA Nemotron model | Planned |
+| [`mcp/`](mcp/) | MCP server: a link-safety gate for AI agents and voice assistants (`check_link`, `deep_check`), over stdio or Streamable HTTP, with a voice-assistant simulator | Working; public instance at <https://mcp.ghostfirst.com> |
 | `lens/` | OpenCV checks (QR sticker overlay, visual timeline evaluation) | Planned |
 
 Design rule for every layer: **AI explains, deterministic rules decide.**
 
-License: Apache-2.0.
+License: [Apache-2.0](LICENSE).
