@@ -19,13 +19,19 @@ Design rules:
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal, Optional, Union
+import argparse
+from pathlib import Path
+from typing import Annotated, Any, Literal, Optional, Sequence, Union
 from urllib.parse import urlsplit
 
 from mcp.server.elicitation import AcceptedElicitation, CancelledElicitation, DeclinedElicitation
 from mcp.server.mcpserver import Context, Elicit, MCPServer, Resolve
+from mcp.server.transport_security import TransportSecuritySettings
 from mcp_types import ToolAnnotations
 from pydantic import BaseModel, Field
+from starlette.applications import Starlette
+from starlette.requests import Request
+from starlette.responses import Response
 
 from . import texts
 from .api import GhostFirstClient, GhostFirstError, api_url_from_env
@@ -293,8 +299,73 @@ def build_server(client: Optional[GhostFirstClient] = None) -> MCPServer:
     return server
 
 
-def main() -> None:
-    build_server().run("stdio")
+SIMULATOR_DIR = Path(__file__).parent / "simulator"
+SIMULATOR_FILES = {"index.html": "text/html", "app.js": "text/javascript", "styles.css": "text/css"}
+# Same-origin only: the page talks to /mcp on its own host and loads nothing else.
+SIMULATOR_HEADERS = {
+    "Content-Security-Policy": (
+        "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; "
+        "img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+    ),
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer",
+    "Cache-Control": "no-store",
+}
+
+
+def build_http_app(
+    client: Optional[GhostFirstClient] = None,
+    *,
+    host: str = "127.0.0.1",
+    allowed_hosts: Sequence[str] = (),
+    simulator: bool = True,
+) -> Starlette:
+    """Streamable HTTP app: MCP at `/mcp`, plus the voice-assistant simulator at `/`.
+
+    Stateful sessions, so a one-time link can still be confirmed by the human
+    (the elicitation request travels on the open `tools/call` stream).
+    """
+    server = build_server(client)
+    if simulator:
+        def page(name: str):
+            async def handler(request: Request) -> Response:
+                body = (SIMULATOR_DIR / name).read_bytes()
+                return Response(body, media_type=SIMULATOR_FILES[name], headers=SIMULATOR_HEADERS)
+            return handler
+
+        for name in SIMULATOR_FILES:
+            path = "/" if name == "index.html" else f"/{name}"
+            server.custom_route(path, methods=["GET"])(page(name))
+    security = None
+    if allowed_hosts:
+        # Public deployment: name every Host the server answers to, and accept
+        # browser requests only from those same origins.
+        security = TransportSecuritySettings(
+            allowed_hosts=list(allowed_hosts),
+            allowed_origins=[f"https://{h}" for h in allowed_hosts],
+        )
+    return server.streamable_http_app(host=host, transport_security=security)
+
+
+def main(argv: Optional[Sequence[str]] = None) -> None:
+    parser = argparse.ArgumentParser(prog="ghostfirst-mcp", description=__doc__.splitlines()[0])
+    parser.add_argument("--http", action="store_true", help="serve Streamable HTTP instead of stdio")
+    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--port", type=int, default=8780)
+    parser.add_argument("--allowed-host", action="append", default=[], metavar="HOST",
+                        help="public Host header to accept (repeatable); required off localhost")
+    parser.add_argument("--no-simulator", action="store_true", help="do not serve the simulator page")
+    args = parser.parse_args(argv)
+    if not args.http:
+        build_server().run("stdio")
+        return
+    local = args.host in ("127.0.0.1", "localhost", "::1")
+    if not local and not args.allowed_host:
+        parser.error("--allowed-host is required when binding to a non-local address")
+    import uvicorn
+
+    app = build_http_app(host=args.host, allowed_hosts=args.allowed_host, simulator=not args.no_simulator)
+    uvicorn.run(app, host=args.host, port=args.port)
 
 
 if __name__ == "__main__":

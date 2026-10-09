@@ -1,6 +1,6 @@
 # ghostfirst-open
 
-The open-source hackathon layer of [GhostFirst](https://52-45-211-166.sslip.io):
+The open-source hackathon layer of [GhostFirst](https://ghostfirst.com):
 *evidence before the click*. GhostFirst sends a disposable remote browser to a
 suspicious link and explains what it saw, before a person or an agent opens it.
 

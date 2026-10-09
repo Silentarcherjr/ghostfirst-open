@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GhostFirst Voice Check</title>
+<link rel="stylesheet" href="/styles.css">
+<script src="/app.js" defer></script>
+</head>
+<body>
+<header class="bar">
+  <span class="brand">GhostFirst Voice Check</span>
+  <span class="note">Simulated voice assistant (Alexa+ track). Every answer comes from the GhostFirst MCP server over Streamable HTTP.</span>
+</header>
+<main class="layout">
+  <section class="device" aria-label="Voice assistant">
+    <div class="ring" id="ring" data-state="idle" aria-hidden="true"></div>
+    <p class="status" id="status" role="status">Connecting…</p>
+    <ol class="talk" id="talk" aria-live="polite"></ol>
+    <div class="confirm" id="confirm" hidden>
+      <button type="button" id="yes" class="primary">Yes</button>
+      <button type="button" id="no">No</button>
+    </div>
+    <form class="ask" id="ask" autocomplete="off">
+      <label class="sr" for="say">Say or type</label>
+      <input id="say" name="say" type="text" placeholder="Is this link safe? https://…" spellcheck="false">
+      <button type="button" id="mic" class="mic" aria-pressed="false" title="Speak">🎙</button>
+      <button type="submit" class="primary">Ask</button>
+    </form>
+    <div class="options">
+      <label><input type="checkbox" id="speak" checked> Speak answers aloud</label>
+    </div>
+  </section>
+  <section class="wire" aria-label="MCP traffic">
+    <h2>MCP traffic</h2>
+    <p class="hint">What the assistant sends to the GhostFirst MCP server and gets back. Page text never reaches the assistant: only fixed sentences, host names and counts.</p>
+    <ol class="log" id="log"></ol>
+  </section>
+</main>
+</body>
+</html>

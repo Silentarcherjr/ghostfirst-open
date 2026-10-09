@@ -15,7 +15,7 @@ from urllib.parse import urlsplit
 import httpx
 
 # Hosted staging API. Override with GHOSTFIRST_API_URL.
-DEFAULT_API_URL = "https://52-45-211-166.sslip.io"
+DEFAULT_API_URL = "https://ghostfirst.com"
 TIMEOUT_SECONDS = 60.0
 
 

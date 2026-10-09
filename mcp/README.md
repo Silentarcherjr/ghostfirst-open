@@ -42,7 +42,41 @@ Both tools are read-only and take only `url`.
 uv venv --python 3.12 .venv
 uv pip install --python .venv/bin/python -e ".[test]"
 .venv/bin/ghostfirst-mcp            # stdio transport
+.venv/bin/ghostfirst-mcp --http     # Streamable HTTP on http://127.0.0.1:8780/mcp
 ```
+
+### Streamable HTTP and the voice simulator
+
+`--http` serves MCP (protocol 2025-11-25 and later) at `/mcp` with stateful
+sessions, so the one-time-link question still reaches the human: the
+`elicitation/create` request travels on the open `tools/call` stream.
+
+The same server also serves **GhostFirst Voice Check** at `/`: a simulated
+voice assistant (Alexa+ style) that is a real MCP client. It runs
+`initialize`, `tools/list`, and `tools/call` over Streamable HTTP, shows the
+traffic, and speaks the answers (browser speech synthesis; voice input where
+the browser supports speech recognition). The page decides nothing: it turns
+the server's fixed sentences into speech, and asks the human Yes/No when the
+server asks. It loads nothing from other sites (strict CSP, same origin).
+
+Off localhost, name every public host name:
+
+```bash
+.venv/bin/ghostfirst-mcp --http --host 0.0.0.0 --allowed-host mcp.example.org
+```
+
+Requests with any other `Host` header, or from any other browser origin, are
+refused (DNS-rebinding protection).
+
+A container image is included (`Dockerfile`); put a TLS proxy in front:
+
+```bash
+docker build -t ghostfirst-mcp .
+docker run -p 127.0.0.1:8780:8780 -e MCP_HOSTNAME=mcp.example.org ghostfirst-mcp
+```
+
+Public instance: <https://mcp.ghostfirst.com> (simulator) and
+`https://mcp.ghostfirst.com/mcp` (MCP endpoint).
 
 `GHOSTFIRST_API_URL` selects the GhostFirst API. It must be `https`; plain
 `http` is accepted only for localhost. The default is the hosted staging API.
