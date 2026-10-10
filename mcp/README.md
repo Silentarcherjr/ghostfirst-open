@@ -36,7 +36,48 @@ Both tools are read-only and take only `url`.
 - `no_obvious_danger` is never presented as "safe". Every result carries
   `not_a_guarantee`.
 
+## Try it (judges)
+
+**Hosted:** open <https://mcp.ghostfirst.com> (the simulator; MCP endpoint
+`https://mcp.ghostfirst.com/mcp`).
+
+**Locally, against the hosted GhostFirst API** (needs
+[uv](https://docs.astral.sh/uv/); uv downloads Python 3.12 if needed):
+
+```bash
+git clone https://github.com/Silentarcherjr/ghostfirst-open.git
+cd ghostfirst-open/mcp
+uv venv --python 3.12 .venv
+uv pip install --python .venv/bin/python -e ".[test]"
+.venv/bin/ghostfirst-mcp --http
+```
+
+Then open <http://127.0.0.1:8780/> in a browser. The simulator connects to
+the local server, which calls `https://ghostfirst.com` (the default
+`GHOSTFIRST_API_URL`), so no account or key is needed. Type or say, for
+example:
+
+1. `Is this link safe? https://52-45-211-166.sslip.io/changes-face.html`
+   — a labeled demo page that turns into a sign-in form after loading. The
+   answer is "be careful" and offers to look again; say or type "yes" to
+   run `deep_check`.
+2. `https://52-45-211-166.sslip.io/steady.html` — an ordinary page; the
+   answer is "no obvious danger" (never "safe").
+3. `https://52-45-211-166.sslip.io/waits-for-you.html` — the form appears
+   only after a visitor moves the pointer or scrolls.
+4. `https://52-45-211-166.sslip.io/reset?token=demo123` — looks like a
+   one-time link, so the server asks **you** (Yes/No) before anything is
+   sent. Answer No and nothing is visited.
+
+The demo pages are listed at <https://52-45-211-166.sslip.io/>; they are
+brand-free and labeled as tests. The "MCP traffic" panel shows every MCP
+message (`initialize` with protocol 2025-11-25, `tools/call`,
+`elicitation/create`). The hosted API is rate-limited; if the answer says
+GhostFirst is busy, wait and try again.
+
 ## Run
+
+Tested with Python 3.12 (the package declares `>=3.10`).
 
 ```bash
 uv venv --python 3.12 .venv
@@ -44,6 +85,15 @@ uv pip install --python .venv/bin/python -e ".[test]"
 .venv/bin/ghostfirst-mcp            # stdio transport
 .venv/bin/ghostfirst-mcp --http     # Streamable HTTP on http://127.0.0.1:8780/mcp
 ```
+
+`--http` options:
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--host` | `127.0.0.1` | Address to bind |
+| `--port` | `8780` | Port to bind |
+| `--allowed-host HOST` | none | Public `Host` name to accept; repeatable; required when `--host` is not local |
+| `--no-simulator` | off | Serve only `/mcp`, without the simulator page |
 
 ### Streamable HTTP and the voice simulator
 
@@ -66,7 +116,8 @@ Off localhost, name every public host name:
 ```
 
 Requests with any other `Host` header, or from any other browser origin, are
-refused (DNS-rebinding protection).
+refused with 403 (DNS-rebinding protection). The accepted browser origin is
+`https://<allowed host>`, so serve the simulator over HTTPS at that name.
 
 A container image is included (`Dockerfile`); put a TLS proxy in front:
 
@@ -79,7 +130,8 @@ Public instance: <https://mcp.ghostfirst.com> (simulator) and
 `https://mcp.ghostfirst.com/mcp` (MCP endpoint).
 
 `GHOSTFIRST_API_URL` selects the GhostFirst API. It must be `https`; plain
-`http` is accepted only for localhost. The default is the hosted staging API.
+`http` is accepted only for localhost. The default is the hosted API,
+`https://ghostfirst.com`.
 
 Example client configuration (for example, Claude Desktop):
 
@@ -99,16 +151,25 @@ The link you check is sent to the GhostFirst API, which opens it in an
 isolated remote browser. Screenshots expire automatically, and no check
 history is stored. This server keeps nothing.
 
+The simulator's voice input uses the browser's own speech recognition; some
+browsers send the audio to their vendor's speech service. Typing avoids
+that.
+
 ## Test
 
 ```bash
 .venv/bin/python -m pytest -q
 ```
 
-The tests drive the real MCP client in memory against a fake API. They cover:
+The tests use a fake API, so they make no network calls (19 tests). The
+server tests drive the real MCP client in memory; the HTTP tests run the
+Streamable HTTP app on a local port. They cover:
 
 - the output shape;
 - that page-controlled text is excluded;
 - the one-time-link consent paths: not asked, accepted, declined, and
   detected by the API;
-- typed errors.
+- typed errors;
+- over HTTP: a browser-style client, the human question on the same stream,
+  refused foreign hosts, the simulator's strict policy, and the
+  `--allowed-host` requirement off localhost.

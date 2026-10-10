@@ -15,4 +15,10 @@ separable layers built on top of it.
 
 Design rule for every layer: **AI explains, deterministic rules decide.**
 
+**Try it:** open <https://mcp.ghostfirst.com>, or run the MCP server and its
+voice-assistant simulator locally in a few commands; see
+[`mcp/README.md` → Try it](mcp/README.md#try-it-judges).
+
+Issues and pull requests are welcome.
+
 License: [Apache-2.0](LICENSE).
