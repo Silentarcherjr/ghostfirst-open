@@ -31,7 +31,7 @@ class McpClient {
   async connect() {
     const init = await this.request('initialize', {
       protocolVersion: PROTOCOL,
-      capabilities: { elicitation: { form: {} } },
+      capabilities: { elicitation: { form: {} }, extensions: { "io.modelcontextprotocol/ui": { mimeTypes: ["text/html;profile=mcp-app"] } } },
       clientInfo: { name: 'ghostfirst-voice-simulator', version: '0.1.0' },
     });
     await this.post({ jsonrpc: '2.0', method: 'notifications/initialized' });
@@ -226,6 +226,28 @@ function log(direction, message) {
 
 // ---------- conversation ----------
 
+let cardReady = false;
+let cardResult = null;
+function renderCard(out) {
+  cardResult = out;
+  if (cardReady) $('verdict-card').contentWindow.postMessage({jsonrpc:'2.0',method:'ui/notifications/tool-result',params:{content:[],structuredContent:out}}, '*');
+}
+window.addEventListener('message', (event) => {
+  const frame = $('verdict-card');
+  if (event.source !== frame.contentWindow || event.data?.jsonrpc !== '2.0') return;
+  const m = event.data;
+  if (m.method === 'ui/initialize') {
+    frame.contentWindow.postMessage({jsonrpc:'2.0',id:m.id,result:{protocolVersion:'2026-01-26',hostInfo:{name:'ghostfirst-simulator',version:'1'},hostCapabilities:{message:{}},hostContext:{displayMode:'inline',deviceClass:window.innerWidth < 600 ? 'mobile':'echo-show',theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'}}}, '*');
+  } else if (m.method === 'ui/notifications/initialized') {
+    cardReady = true;
+    frame.contentWindow.postMessage({jsonrpc:'2.0',method:'ui/notifications/tool-input',params:{arguments:{}}}, '*');
+    if (cardResult) renderCard(cardResult);
+  } else if (m.method === 'ui/message' && m.params?.role === 'user' && ['Yes','No'].includes(m.params?.content?.text)) {
+    frame.contentWindow.postMessage({jsonrpc:'2.0',id:m.id,result:{}}, '*');
+    hear(m.params.content.text);
+  }
+});
+
 const conversation = { lastUrl: null, followUp: null, confirm: null, busy: false };
 
 function askHuman(params) {
@@ -233,6 +255,7 @@ function askHuman(params) {
   const keys = Object.keys(props);
   const field = keys.length === 1 && props[keys[0]].type === 'boolean' ? keys[0] : null;
   if (!field) return Promise.resolve({ action: 'decline' });
+  renderCard({human_question:params.message,agent_guidance:params.message});
   bubble('assistant', params.message);
   say(params.message);
   setState('idle', 'Waiting for your answer');
@@ -263,7 +286,8 @@ async function run(tool, url) {
     const answer = tool === 'deep_check' ? deepAnswer(out) : linkAnswer(out);
     conversation.followUp = answer.followUp ? 'deep_check' : null;
     bubble('assistant', answer.text, answer.details, answer.verdict);
-    say(answer.text);
+    renderCard(out);
+    say([answer.text, ...answer.details, out.not_a_guarantee].filter(Boolean).join(' '));
     setState(answer.verdict || 'idle', 'Ask me about another link.');
   } catch (error) {
     const text = "I couldn't check that link right now, so please don't open it yet.";
@@ -342,6 +366,9 @@ async function start() {
   try {
     const init = await client.connect();
     const { tools } = await client.request('tools/list', {});
+    const resource = await client.request('resources/read', {uri:'ui://ghostfirst/verdict'});
+    const card = resource.contents.find((c) => c.mimeType === 'text/html;profile=mcp-app');
+    if (card) { $('verdict-card').srcdoc = card.text; $('verdict-card').hidden = false; }
     setState('idle', `Connected to ${init.serverInfo.title || init.serverInfo.name} · tools: ${tools.map((t) => t.name).join(', ')}`);
   } catch (error) {
     setState('idle', `Could not reach the MCP server: ${error.message}`);

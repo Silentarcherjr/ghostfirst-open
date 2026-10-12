@@ -200,3 +200,20 @@ HTTP MCP server with a fake API that deliberately waits 5 seconds. It measures
 
 This measures local acknowledgements, not completion time or Alexa/cloud
 network latency. No real API/provider visit is used by the measurement.
+
+## MCP Apps card
+
+`ui://ghostfirst/verdict` is a self-contained `text/html;profile=mcp-app`
+resource, linked by `_meta.ui.resourceUri` on the tools. The simulator reads
+it over MCP and hosts it in a sandboxed opaque-origin iframe. Only the
+MCP Apps initialize / initialized / tool-input / tool-result / ui/message
+bridge is used. Display mode is inline; host context chooses mobile/block
+and light/dark treatments. The card has no network access or screenshots.
+Its CSP hashes permit only its fixed JS/CSS. Evidence is inserted as text.
+Yes/No is a human action sent to the conversation; it never changes a verdict
+or grants a tool an agent-controlled consent argument. Voice answers include
+the reasons, final host, and non-guarantee without depending on the card.
+
+Design references: [Amazon layout](https://developer.amazon.com/docs/alexaplus/add-ons/mcp-addon-layout-and-rendering.html),
+[accessibility](https://developer.amazon.com/docs/alexaplus/add-ons/mcp-addon-accessibility.html),
+[MCP Apps specification](https://github.com/modelcontextprotocol/ext-apps/blob/main/specification/2026-01-26/apps.mdx).

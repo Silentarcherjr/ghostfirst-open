@@ -4,7 +4,7 @@
   --ink: #1b1d22;
   --muted: #5d6270;
   --line: #d9d6cf;
-  --accent: #1f6feb;
+  --accent: #175cc5;
   --danger: #b42318;
   --caution: #9a6700;
   --ok: #1a7f37;
@@ -106,7 +106,7 @@ button {
   color: var(--ink);
   cursor: pointer;
 }
-button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.primary { background: #175cc5; border-color: #175cc5; color: #fff; }
 button:disabled { opacity: 0.5; cursor: default; }
 .mic[aria-pressed="true"] { border-color: var(--accent); }
 .options { margin-top: 10px; color: var(--muted); font-size: 15px; }
@@ -127,3 +127,8 @@ button:disabled { opacity: 0.5; cursor: default; }
   overflow-wrap: anywhere;
 }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+
+#verdict-card { width:100%; height:560px; border:0; margin-top:14px; }
+button { min-height:48px; min-width:48px; }
+button:focus-visible,input:focus-visible { outline:3px solid var(--ink); outline-offset:3px; }
+@media(max-width:480px) { .ask { flex-wrap:wrap; } .ask input { flex-basis:100%; } }

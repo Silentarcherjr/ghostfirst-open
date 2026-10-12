@@ -34,7 +34,7 @@ from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import Response
 
-from . import texts
+from . import texts, ui
 from .api import GhostFirstClient, GhostFirstError, api_url_from_env
 from .jobs import JOB_TIMEOUT, Jobs
 from .sensitive import one_time_link_indicators
@@ -251,6 +251,7 @@ def build_server(client: Optional[GhostFirstClient] = None) -> MCPServer:
         title="GhostFirst link check",
         instructions=INSTRUCTIONS,
         version="0.1.0",
+        extensions=[ui.Apps()],
     )
     read_only = ToolAnnotations(readOnlyHint=True, destructiveHint=False, openWorldHint=True)
 
@@ -306,7 +307,7 @@ def build_server(client: Optional[GhostFirstClient] = None) -> MCPServer:
         return model(status="checking", job_id=job_id,
                      agent_guidance="The check is running. Poll get_check_result with this job_id. Do not open the link yet.")
 
-    @server.tool(annotations=read_only)
+    @server.tool(annotations=read_only, meta={"ui": {"resourceUri": ui.URI}})
     async def check_link(
         url: str, consent: Annotated[Consent, Resolve(one_time_consent)], ctx: Context
     ) -> LinkCheck:
@@ -319,7 +320,7 @@ def build_server(client: Optional[GhostFirstClient] = None) -> MCPServer:
         visit takes seconds. The link is sent to the GhostFirst service."""
         return await run("scan", url, consent, ctx)
 
-    @server.tool(annotations=read_only)
+    @server.tool(annotations=read_only, meta={"ui": {"resourceUri": ui.URI}})
     async def deep_check(
         url: str, consent: Annotated[Consent, Resolve(one_time_consent)], ctx: Context
     ) -> DeepCheck:
@@ -329,7 +330,7 @@ def build_server(client: Optional[GhostFirstClient] = None) -> MCPServer:
         seconds to finish, but returns a job_id immediately; poll get_check_result."""
         return await run("deep", url, consent, ctx)
 
-    @server.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, openWorldHint=False))
+    @server.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, openWorldHint=False), meta={"ui": {"resourceUri": ui.URI}})
     async def get_check_result(job_id: str, ctx: Context) -> DeepCheck:
         """Poll a check started in this MCP session. Checking is not a verdict.
         Results expire after 15 minutes; unknown, expired, and other-session
@@ -341,6 +342,10 @@ def build_server(client: Optional[GhostFirstClient] = None) -> MCPServer:
         return DeepCheck.model_validate(job.result.model_dump()) if job.result else DeepCheck(status="checking", job_id=job_id,
                                      agent_guidance="Still checking. Poll again; do not open the link yet.")
 
+    @server.resource(ui.URI, mime_type=ui.MIME, meta=ui.META)
+    def verdict_card():
+        return ui.HTML
+
     return server
 
 
@@ -349,7 +354,7 @@ SIMULATOR_FILES = {"index.html": "text/html", "app.js": "text/javascript", "styl
 # Same-origin only: the page talks to /mcp on its own host and loads nothing else.
 SIMULATOR_HEADERS = {
     "Content-Security-Policy": (
-        "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; "
+        f"default-src 'none'; script-src 'self' {ui.SCRIPT_HASH}; style-src 'self' {ui.STYLE_HASH}; connect-src 'self'; frame-src 'self'; "
         "img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
     ),
     "X-Content-Type-Options": "nosniff",
