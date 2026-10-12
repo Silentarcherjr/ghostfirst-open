@@ -20,6 +20,7 @@ Design rules:
 from __future__ import annotations
 
 import argparse
+import asyncio
 from pathlib import Path
 from typing import Annotated, Any, Literal, Optional, Sequence, Union
 from urllib.parse import urlsplit
@@ -35,10 +36,11 @@ from starlette.responses import Response
 
 from . import texts
 from .api import GhostFirstClient, GhostFirstError, api_url_from_env
+from .jobs import JOB_TIMEOUT, Jobs
 from .sensitive import one_time_link_indicators
 
 State = Literal["do_not_continue", "caution", "no_obvious_danger"]
-Status = Literal["checked", "needs_human_confirmation", "declined_by_human", "error"]
+Status = Literal["checking", "checked", "needs_human_confirmation", "declined_by_human", "error"]
 
 INSTRUCTIONS = (
     "Call check_link before opening, following, summarizing by visiting, or submitting "
@@ -58,6 +60,7 @@ class Reason(BaseModel):
 
 class LinkCheck(BaseModel):
     status: Status
+    job_id: Optional[str] = None
     verdict: Optional[State] = None
     agent_guidance: str
     summary: Optional[str] = None
@@ -81,8 +84,9 @@ class VisitorProfile(BaseModel):
     requested: list[str] = Field(default_factory=list)
 
 
-class DeepCheck(BaseModel):
+class DeepCheck(LinkCheck):
     status: Status
+    job_id: Optional[str] = None
     verdict: Optional[State] = None
     agent_guidance: str
     comparison: Optional[str] = None
@@ -241,6 +245,7 @@ def _confirmed(consent: Consent) -> Optional[bool]:
 
 def build_server(client: Optional[GhostFirstClient] = None) -> MCPServer:
     client = client or GhostFirstClient(api_url_from_env())
+    jobs = Jobs()
     server = MCPServer(
         name="ghostfirst",
         title="GhostFirst link check",
@@ -249,7 +254,19 @@ def build_server(client: Optional[GhostFirstClient] = None) -> MCPServer:
     )
     read_only = ToolAnnotations(readOnlyHint=True, destructiveHint=False, openWorldHint=True)
 
-    async def run(kind: str, url: str, consent: Consent):
+    def connection(ctx: Context):
+        # MCP 2.2.0's high-level Context exposes a per-request proxy. This
+        # pinned-SDK adapter uses its verified Connection; never trust a
+        # client-supplied header, client name, or caller-supplied session id.
+        if ctx.protocol_version not in {"2025-11-25", "2025-06-18", "2024-11-05"}:
+            return None
+        owner = getattr(ctx.session, "_connection", None)
+        if owner is not None and "ghostfirst_jobs" not in owner.state:
+            owner.state["ghostfirst_jobs"] = True
+            owner.exit_stack.push_async_callback(jobs.close_owner, owner)
+        return owner
+
+    async def run(kind: str, url: str, consent: Consent, ctx: Context):
         call = client.scan if kind == "scan" else client.deep_check
         shape = link_check_from_scan if kind == "scan" else deep_check_from_result
         model = LinkCheck if kind == "scan" else DeepCheck
@@ -264,37 +281,65 @@ def build_server(client: Optional[GhostFirstClient] = None) -> MCPServer:
                 status="declined_by_human" if confirmed is False else "needs_human_confirmation",
                 agent_guidance=not_visited, error_code=SENSITIVE_CODE,
             )
-        try:
-            return shape(await call(url, confirm_sensitive_link=confirmed is True))
-        except GhostFirstError as error:
-            if error.code == SENSITIVE_CODE:
-                # The API's rules caught a link the local rules did not.
-                return model(status="needs_human_confirmation", agent_guidance=not_visited,
-                             error_code=SENSITIVE_CODE)
-            return model(status="error", agent_guidance=_error_guidance(error.code),
-                         error_code=error.code, retry_after_seconds=error.retry_after_seconds)
+        owner = connection(ctx)
+        if owner is None:
+            return model(status="error", agent_guidance=_error_guidance("unknown_error"), error_code="session_required")
+
+        async def work():
+            try:
+                result = await asyncio.wait_for(call(url, confirm_sensitive_link=confirmed is True), JOB_TIMEOUT)
+                return shape(result)
+            except GhostFirstError as error:
+                if error.code == SENSITIVE_CODE:
+                    return model(status="needs_human_confirmation", agent_guidance=not_visited, error_code=SENSITIVE_CODE)
+                return model(status="error", agent_guidance=_error_guidance(error.code),
+                             error_code=error.code, retry_after_seconds=error.retry_after_seconds)
+            except Exception:
+                # Invalid JSON/schema, timeout, or unexpected provider errors never
+                # leak exception text and never become a calm verdict.
+                return model(status="error", agent_guidance=_error_guidance("unknown_error"), error_code="check_failed")
+
+        job_id = jobs.start(owner, work)
+        if not job_id:
+            return model(status="error", agent_guidance=_error_guidance("server_busy"), error_code="server_busy")
+        await ctx.report_progress(0, 1, "Check queued. Do not open the link while checking.")
+        return model(status="checking", job_id=job_id,
+                     agent_guidance="The check is running. Poll get_check_result with this job_id. Do not open the link yet.")
 
     @server.tool(annotations=read_only)
     async def check_link(
-        url: str, consent: Annotated[Consent, Resolve(one_time_consent)]
+        url: str, consent: Annotated[Consent, Resolve(one_time_consent)], ctx: Context
     ) -> LinkCheck:
         """Check a link with GhostFirst BEFORE opening or following it.
 
         A disposable remote browser visits the link away from this machine and the
         user's device. Returns a deterministic verdict (do_not_continue, caution,
         no_obvious_danger), the evidence behind it, and guidance for the agent.
-        Takes about 5-10 seconds. The link is sent to the GhostFirst service."""
-        return await run("scan", url, consent)
+        Returns checking and a job_id immediately; poll get_check_result. The actual
+        visit takes seconds. The link is sent to the GhostFirst service."""
+        return await run("scan", url, consent, ctx)
 
     @server.tool(annotations=read_only)
     async def deep_check(
-        url: str, consent: Annotated[Consent, Resolve(one_time_consent)]
+        url: str, consent: Annotated[Consent, Resolve(one_time_consent)], ctx: Context
     ) -> DeepCheck:
         """Visit a link as three different visitors (phone, computer, another browser)
         and report whether the site showed them different things (cloaking). Use it
         when check_link recommends it or the user wants a deeper look. Takes about
-        10-20 seconds."""
-        return await run("deep", url, consent)
+        seconds to finish, but returns a job_id immediately; poll get_check_result."""
+        return await run("deep", url, consent, ctx)
+
+    @server.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, openWorldHint=False))
+    async def get_check_result(job_id: str, ctx: Context) -> DeepCheck:
+        """Poll a check started in this MCP session. Checking is not a verdict.
+        Results expire after 15 minutes; unknown, expired, and other-session
+        jobs all return the same error. Never open a link while checking."""
+        job = jobs.get(connection(ctx), job_id)
+        if job is None:
+            return DeepCheck(status="error", agent_guidance=_error_guidance("unknown_error"), error_code="job_not_found")
+        await ctx.report_progress(1 if job.result else 0, 1, "Check complete." if job.result else "Still checking.")
+        return DeepCheck.model_validate(job.result.model_dump()) if job.result else DeepCheck(status="checking", job_id=job_id,
+                                     agent_guidance="Still checking. Poll again; do not open the link yet.")
 
     return server
 

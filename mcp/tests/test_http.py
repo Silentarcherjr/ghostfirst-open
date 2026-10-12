@@ -77,8 +77,22 @@ def call_tool(http: httpx.Client, base: str, headers: dict, url: str, answer: di
                 reply = {"jsonrpc": "2.0", "id": message["id"], "result": answer}
                 assert http.post(f"{base}/mcp", headers=headers, json=reply).status_code == 202
             elif message.get("id") == 2:
-                return message["result"]["structuredContent"], asked
+                out = message["result"]["structuredContent"]
+                if out["status"] == "checking":
+                    return poll(http, base, headers, out["job_id"]), asked
+                return out, asked
     raise AssertionError("no tool result")
+
+
+def poll(http, base, headers, job_id):
+    for i in range(100):
+        response = http.post(f"{base}/mcp", headers=headers, json={"jsonrpc": "2.0", "id": 10 + i,
+            "method": "tools/call", "params": {"name": "get_check_result", "arguments": {"job_id": job_id}}})
+        out = list(events(response))[-1]["result"]["structuredContent"]
+        if out["status"] != "checking":
+            return out
+        time.sleep(0.01)
+    raise AssertionError("job did not finish")
 
 
 def test_browser_style_client_checks_a_link(served) -> None:

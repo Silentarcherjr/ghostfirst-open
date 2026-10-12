@@ -12,10 +12,22 @@ result for agents. No model output can set or change a verdict.
 
 | Tool | What it does | Typical time |
 |---|---|---|
-| `check_link(url)` | Visits the link once. Returns `verdict` (`do_not_continue`, `caution`, `no_obvious_danger`), `reasons`, `agent_guidance`, and `recommended_next_step` | 5–10 s |
-| `deep_check(url)` | Visits as a phone, a computer, and another browser, and reports whether they were shown different things (cloaking) | 10–20 s |
+| `check_link(url)` | Visits the link once. Returns `verdict` (`do_not_continue`, `caution`, `no_obvious_danger`), `reasons`, `agent_guidance`, and `recommended_next_step` | immediate acknowledgement; visit finishes in seconds |
+| `deep_check(url)` | Visits as a phone, a computer, and another browser, and reports whether they were shown different things (cloaking) | immediate acknowledgement; visit finishes in seconds |
 
-Both tools are read-only and take only `url`.
+Both visit tools are read-only and take only `url`. They return
+`status: checking` with an opaque `job_id`, without a verdict. Poll the new
+read-only `get_check_result(job_id)` on the same MCP session until checked
+or error. Never treat checking as permission to open a link. Progress
+notifications are emitted when the caller supplies a progress token, on
+acknowledgement and polling (no notification is promised after a closed
+request stream). Human elicitation comes before a job starts.
+
+Jobs expire after 15 minutes, time out at 65 seconds, are capped at 8 per
+session / 128 total, and are cancelled on disconnect/expiry. They live only
+in memory. This flow requires a stateful handshake protocol (the simulator
+uses 2025-11-25); stateless 2026-era requests fail closed. The pinned MCP
+2.2.0 adapter uses its verified Connection, never a caller-selected identity.
 
 ## Safety design
 
@@ -173,3 +185,18 @@ Streamable HTTP app on a local port. They cover:
 - over HTTP: a browser-style client, the human question on the same stream,
   refused foreign hosts, the simulator's strict policy, and the
   `--allowed-host` requirement off localhost.
+
+## Local acknowledgement latency (2026-10-11)
+
+`PYTHONPATH=src .venv/bin/python tool/measure_latency.py` starts a loopback
+HTTP MCP server with a fake API that deliberately waits 5 seconds. It measures
+100 round trips per tool, excluding initialization and human thinking time:
+
+| Tool | Median | p95 | Maximum |
+|---|---:|---:|---:|
+| check_link | 2.03 ms | 2.50 ms | 14.37 ms |
+| deep_check | 1.48 ms | 1.81 ms | 2.21 ms |
+| get_check_result (pending) | 1.31 ms | 1.61 ms | 2.13 ms |
+
+This measures local acknowledgements, not completion time or Alexa/cloud
+network latency. No real API/provider visit is used by the measurement.

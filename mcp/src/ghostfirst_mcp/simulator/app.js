@@ -253,7 +253,13 @@ async function run(tool, url) {
   conversation.busy = true;
   setState('thinking', tool === 'deep_check' ? 'Visiting as three different visitors…' : 'Sending a disposable browser to the link…');
   try {
-    const out = await client.callTool(tool, { url });
+    let out = await client.callTool(tool, { url });
+    const deadline = Date.now() + 70000;
+    while (out.status === 'checking' && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      out = await client.callTool('get_check_result', { job_id: out.job_id });
+    }
+    if (out.status === 'checking') throw new Error('Check timed out');
     const answer = tool === 'deep_check' ? deepAnswer(out) : linkAnswer(out);
     conversation.followUp = answer.followUp ? 'deep_check' : null;
     bubble('assistant', answer.text, answer.details, answer.verdict);

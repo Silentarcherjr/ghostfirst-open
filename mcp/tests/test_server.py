@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import asyncio
 
 import httpx
 import pytest
@@ -65,8 +66,13 @@ def fake_api(responses: list[httpx.Response], seen: list[dict]) -> GhostFirstCli
 
 
 async def call(server, tool: str, url: str, **client_kwargs):
-    async with Client(server, **client_kwargs) as client:
+    async with Client(server, mode="legacy", **client_kwargs) as client:
         result = await client.call_tool(tool, {"url": url})
+        for _ in range(100):
+            if result.structured_content["status"] != "checking":
+                break
+            await asyncio.sleep(0.01)
+            result = await client.call_tool("get_check_result", {"job_id": result.structured_content["job_id"]})
     assert not result.is_error, result
     return result.structured_content
 
@@ -182,9 +188,9 @@ async def test_ordinary_links_never_ask_the_human() -> None:
 
 
 async def test_tools_are_listed_as_read_only() -> None:
-    async with Client(build_server(fake_api([], []))) as client:
+    async with Client(build_server(fake_api([], [])), mode="legacy") as client:
         tools = {tool.name: tool for tool in (await client.list_tools()).tools}
-    assert set(tools) == {"check_link", "deep_check"}
+    assert set(tools) == {"check_link", "deep_check", "get_check_result"}
     # The agent cannot pass a confirmation: only `url` is an argument.
     assert set(tools["check_link"].input_schema["properties"]) == {"url"}
     assert tools["check_link"].annotations.read_only_hint is True
