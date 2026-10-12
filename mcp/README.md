@@ -232,3 +232,14 @@ the same session for 24 hours, cleared at disconnect. Repeated checks on the
 same UTC date add the fixed “you checked this site earlier today” sentence;
 results always come from a fresh visit. This is a simulator share flow, not a
 native phone share extension or account-wide inbox.
+
+### Client locale
+
+Send `tools/call` request metadata `_meta: {"locale": "es-US"}` for Spanish;
+`es-*` selects es-US and other/missing locales use en-US. A completed job
+retains its originating locale. Verdict codes and input schemas are stable.
+Spanish summaries, findings, credential labels and comparisons are copied
+from the web ES map and covered by the web-copy drift contract. Human
+elicitation, failures, history and safety guidance also use fixed Spanish.
+The simulator's EN/ES selector controls request metadata, speechSynthesis and
+SpeechRecognition language; voice availability depends on the local browser.

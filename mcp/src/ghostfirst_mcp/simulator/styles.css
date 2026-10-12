@@ -135,3 +135,6 @@ button:focus-visible,input:focus-visible { outline:3px solid var(--ink); outline
 
 .phone { border:2px solid var(--muted); padding:16px; border-radius:20px; margin-bottom:20px; }
 .phone h2 { font-size:20px; } .phone input { width:100%; min-height:48px; font:inherit; color:var(--ink); background:var(--bg); border:1px solid var(--muted); padding:10px; }
+
+select { min-width:64px; min-height:48px; font:inherit; color:var(--ink); background:var(--panel); }
+select:focus-visible { outline:3px solid var(--ink); outline-offset:3px; }

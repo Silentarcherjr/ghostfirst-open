@@ -20,6 +20,8 @@ Design rules:
 from __future__ import annotations
 
 import argparse
+import functools
+import inspect
 import asyncio
 from pathlib import Path
 from typing import Annotated, Any, Literal, Optional, Sequence, Union
@@ -60,6 +62,7 @@ class Reason(BaseModel):
 
 
 class LinkCheck(BaseModel):
+    locale: str = "en-US"
     status: Status
     job_id: Optional[str] = None
     verdict: Optional[State] = None
@@ -128,11 +131,11 @@ def _fill(template: str, params: dict[str, Any]) -> str:
     return template.format_map(Missing({k: str(v) for k, v in params.items()}))
 
 
-def _reasons(verdict: dict[str, Any]) -> list[Reason]:
+def _reasons(verdict: dict[str, Any], locale="en-US") -> list[Reason]:
     out = []
     for finding in verdict.get("reasons", []):
-        template = texts.FINDINGS.get(finding.get("code", ""))
-        text = _fill(template, finding.get("params", {})) if template else "Additional evidence."
+        template = texts.table("FINDINGS", locale).get(finding.get("code", ""))
+        text = _fill(template, finding.get("params", {})) if template else texts.fixed("Additional evidence.", locale)
         out.append(Reason(code=finding.get("code", ""), severity=finding.get("severity", "info"), text=text))
     return out
 
@@ -143,14 +146,14 @@ def _requested(forms: dict[str, Any]) -> list[str]:
     return [name for key, name in names if forms.get(key)]
 
 
-def _summary(verdict: dict[str, Any]) -> str:
+def _summary(verdict: dict[str, Any], locale="en-US") -> str:
     params = dict(verdict.get("summary_params", {}))
-    params["credential"] = texts.CREDENTIALS.get(params.get("credential", ""), texts.CREDENTIALS["generic"])
-    template = texts.SUMMARIES.get(verdict.get("summary_code", ""), texts.SUMMARIES["nothing_observed"])
+    params["credential"] = texts.table("CREDENTIALS", locale).get(params.get("credential", ""), texts.table("CREDENTIALS", locale)["generic"])
+    template = texts.table("SUMMARIES", locale).get(verdict.get("summary_code", ""), texts.table("SUMMARIES", locale)["nothing_observed"])
     return _fill(template, params)
 
 
-def link_check_from_scan(result: dict[str, Any]) -> LinkCheck:
+def link_check_from_scan(result: dict[str, Any], locale="en-US") -> LinkCheck:
     verdict = result.get("verdict") or {"state": result.get("risk", {}).get("state", "caution")}
     state = verdict.get("state", "caution")
     timeline = result.get("visual_timeline") or {}
@@ -158,9 +161,9 @@ def link_check_from_scan(result: dict[str, Any]) -> LinkCheck:
     return LinkCheck(
         status="checked",
         verdict=state,
-        agent_guidance=texts.GUIDANCE.get(state, texts.GUIDANCE["caution"]),
-        summary=_summary(verdict),
-        reasons=_reasons(verdict),
+        agent_guidance=texts.table("GUIDANCE", locale).get(state, texts.table("GUIDANCE", locale)["caution"]),
+        summary=_summary(verdict, locale),
+        reasons=_reasons(verdict, locale),
         rules=verdict.get("rules", []),
         final_host=_host(result.get("final_url")),
         redirects=max(0, len(result.get("redirect_chain", [])) - 1),
@@ -170,13 +173,13 @@ def link_check_from_scan(result: dict[str, Any]) -> LinkCheck:
     )
 
 
-def deep_check_from_result(result: dict[str, Any]) -> DeepCheck:
+def deep_check_from_result(result: dict[str, Any], locale="en-US") -> DeepCheck:
     verdict = result.get("verdict") or {}
     state = verdict.get("state", "caution")
     comparison = result.get("comparison", {})
-    title, detail = texts.COMPARISONS.get(comparison.get("classification", ""), (None, None))
+    title, detail = texts.table("COMPARISONS", locale).get(comparison.get("classification", ""), (None, None))
     differences = [
-        texts.DIFFERENCES[d["type"]] for d in comparison.get("differences", []) if d.get("type") in texts.DIFFERENCES
+        texts.table("DIFFERENCES", locale)[d["type"]] for d in comparison.get("differences", []) if d.get("type") in texts.DIFFERENCES
     ]
     visitors = []
     for wisp in result.get("wisps", []):
@@ -190,12 +193,12 @@ def deep_check_from_result(result: dict[str, Any]) -> DeepCheck:
     return DeepCheck(
         status="checked",
         verdict=state,
-        agent_guidance=texts.GUIDANCE.get(state, texts.GUIDANCE["caution"]),
+        agent_guidance=texts.table("GUIDANCE", locale).get(state, texts.table("GUIDANCE", locale)["caution"]),
         comparison=title,
         comparison_detail=detail,
         differences=differences,
         visitors=visitors,
-        reasons=_reasons(verdict),
+        reasons=_reasons(verdict, locale),
     )
 
 
@@ -218,6 +221,27 @@ class NoQuestion(BaseModel):
 Consent = Union[NoQuestion, AcceptedElicitation[HumanConfirmation], DeclinedElicitation, CancelledElicitation]
 
 
+def client_locale(ctx):
+    meta = ctx.request_context.meta
+    value = meta.get("locale", "") if isinstance(meta, dict) else (meta.model_extra or {}).get("locale", "") if meta else ""
+    return "es-US" if isinstance(value, str) and value.lower().startswith("es") else "en-US"
+
+def localized_tool(fn):
+    signature = inspect.signature(fn)
+    @functools.wraps(fn)
+    async def wrapped(*args, **kwargs):
+        ctx = signature.bind(*args, **kwargs).arguments["ctx"]
+        out = await fn(*args, **kwargs)
+        # Completed jobs retain their originating locale when polled.
+        locale = out.locale if out.status == "checked" else client_locale(ctx)
+        out.locale = locale
+        for field in ("agent_guidance", "history_note"):
+            setattr(out, field, texts.fixed(getattr(out, field), locale))
+        out.not_a_guarantee = texts.table("NOT_A_GUARANTEE", locale)
+        out.untrusted_data_notice = texts.table("UNTRUSTED", locale)
+        return out
+    return wrapped
+
 async def one_time_consent(url: str, ctx: Context) -> Union[NoQuestion, Elicit[HumanConfirmation]]:
     """Ask the human only for links that look one-time, before anything is sent."""
     if not one_time_link_indicators(url):
@@ -226,8 +250,7 @@ async def one_time_consent(url: str, ctx: Context) -> Union[NoQuestion, Elicit[H
     if capabilities is None or capabilities.elicitation is None:
         return NoQuestion(reason="client_cannot_ask")
     return Elicit(
-        "This link looks like a one-time link (password reset, sign-in, or invitation). "
-        "Checking it may use it up. Should GhostFirst visit it anyway?",
+        texts.fixed(texts.CONSENT, client_locale(ctx)),
         HumanConfirmation,
     )
 
@@ -294,7 +317,8 @@ def build_server(client: Optional[GhostFirstClient] = None) -> MCPServer:
         async def work():
             try:
                 result = await asyncio.wait_for(call(url, confirm_sensitive_link=confirmed is True), JOB_TIMEOUT)
-                shaped = shape(result)
+                shaped = shape(result, client_locale(ctx))
+                shaped.locale = client_locale(ctx)
                 host = shaped.final_host or next((v.final_host for v in getattr(shaped, "visitors", []) if v.final_host), None)
                 shaped.checked_earlier_today = owner.state["ghostfirst_inbox"].remember(host)
                 if shaped.checked_earlier_today:
@@ -313,11 +337,12 @@ def build_server(client: Optional[GhostFirstClient] = None) -> MCPServer:
         job_id = jobs.start(owner, work)
         if not job_id:
             return model(status="error", agent_guidance=_error_guidance("server_busy"), error_code="server_busy")
-        await ctx.report_progress(0, 1, "Check queued. Do not open the link while checking.")
+        await ctx.report_progress(0, 1, texts.fixed("Check queued. Do not open the link while checking.", client_locale(ctx)))
         return model(status="checking", job_id=job_id,
                      agent_guidance="The check is running. Poll get_check_result with this job_id. Do not open the link yet.")
 
     @server.tool(annotations=read_only, meta={"ui": {"resourceUri": ui.URI}})
+    @localized_tool
     async def check_link(
         url: str, consent: Annotated[Consent, Resolve(one_time_consent)], ctx: Context
     ) -> LinkCheck:
@@ -331,6 +356,7 @@ def build_server(client: Optional[GhostFirstClient] = None) -> MCPServer:
         return await run("scan", url, consent, ctx)
 
     @server.tool(annotations=read_only, meta={"ui": {"resourceUri": ui.URI}})
+    @localized_tool
     async def deep_check(
         url: str, consent: Annotated[Consent, Resolve(one_time_consent)], ctx: Context
     ) -> DeepCheck:
@@ -341,6 +367,7 @@ def build_server(client: Optional[GhostFirstClient] = None) -> MCPServer:
         return await run("deep", url, consent, ctx)
 
     @server.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, openWorldHint=False), meta={"ui": {"resourceUri": ui.URI}})
+    @localized_tool
     async def get_check_result(job_id: str, ctx: Context) -> DeepCheck:
         """Poll a check started in this MCP session. Checking is not a verdict.
         Results expire after 15 minutes; unknown, expired, and other-session
@@ -348,12 +375,13 @@ def build_server(client: Optional[GhostFirstClient] = None) -> MCPServer:
         job = jobs.get(connection(ctx), job_id)
         if job is None:
             return DeepCheck(status="error", agent_guidance=_error_guidance("unknown_error"), error_code="job_not_found")
-        await ctx.report_progress(1 if job.result else 0, 1, "Check complete." if job.result else "Still checking.")
+        await ctx.report_progress(1 if job.result else 0, 1, texts.fixed("Check complete." if job.result else "Still checking.", client_locale(ctx)))
         return DeepCheck.model_validate(job.result.model_dump()) if job.result else DeepCheck(status="checking", job_id=job_id,
                                      agent_guidance="Still checking. Poll again; do not open the link yet.")
 
     @server.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint=False),
                  meta={"ui": {"visibility": ["app"]}})
+    @localized_tool
     async def share_link(url: str, ctx: Context) -> LinkCheck:
         """App-only inbox ingestion after a human presses Share. Stores the link
         in this MCP session for 15 minutes; does not visit it or grant consent."""
@@ -363,6 +391,7 @@ def build_server(client: Optional[GhostFirstClient] = None) -> MCPServer:
         return LinkCheck(status="shared", agent_guidance="Link shared to this session. Ask check_shared_link to check it; do not open it yet.")
 
     @server.tool(annotations=read_only, meta={"ui": {"resourceUri": ui.URI}})
+    @localized_tool
     async def check_shared_link(ctx: Context) -> LinkCheck:
         """Check the latest link the human shared to this session, without URL
         dictation. One-time links need human elicitation before a job starts.
@@ -380,7 +409,7 @@ def build_server(client: Optional[GhostFirstClient] = None) -> MCPServer:
                 consent = NoQuestion(reason="client_cannot_ask")
             else:
                 consent = await ctx.elicit(
-                    "This link looks like a one-time link. Checking it may use it up. Should GhostFirst visit it anyway?",
+                    texts.fixed(texts.CONSENT, client_locale(ctx)),
                     HumanConfirmation,
                 )
         return await run("scan", url, consent, ctx)

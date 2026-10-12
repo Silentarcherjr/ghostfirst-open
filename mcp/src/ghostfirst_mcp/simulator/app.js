@@ -8,6 +8,8 @@ const PROTOCOL = '2025-11-25';
 const ENDPOINT = '/mcp';
 const LOG_LIMIT = 40;
 
+let locale = 'en-US';
+const tr = (en, es) => locale === 'es-US' ? es : en;
 const $ = (id) => document.getElementById(id);
 
 class McpClient {
@@ -107,7 +109,7 @@ class McpClient {
   }
 
   async callTool(name, args) {
-    const result = await this.request('tools/call', { name, arguments: args });
+    const result = await this.request('tools/call', { name, arguments: args, _meta: {locale} });
     if (result.isError || !result.structuredContent) throw new Error('The tool call failed');
     return result.structuredContent;
   }
@@ -119,7 +121,7 @@ function say(text) {
   if (!$('speak').checked || !('speechSynthesis' in window)) return;
   window.speechSynthesis.cancel();
   const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = 'en-US';
+  utterance.lang = locale;
   utterance.rate = 0.95;
   window.speechSynthesis.speak(utterance);
 }
@@ -142,12 +144,13 @@ function findUrl(text) {
   return domain ? `https://${domain[0].replace(TRAILING, '')}` : null;
 }
 
-const isYes = (t) => /^\s*(yes|yeah|yep|sure|ok(ay)?|please|do it|go ahead)\b/i.test(t);
+const isYes = (t) => /^\s*(sí|si|claro|yes|yeah|yep|sure|ok(ay)?|please|do it|go ahead)\b/i.test(t);
 const isNo = (t) => /^\s*(no|nope|don'?t|stop|cancel|never ?mind)\b/i.test(t);
-const wantsDeeper = (t) => /\b(deep|deeper|again|closer|phone|computer)\b/i.test(t);
+const wantsDeeper = (t) => /\b(profunda|profundo|otra vez|deep|deeper|again|closer|phone|computer)\b/i.test(t);
 
 // ---------- turning tool results into speech ----------
 
+const ES_LEAD = {do_not_continue:"No abras este enlace ni ingreses datos.", caution:"Ten cuidado con este enlace.", no_obvious_danger:"No observé peligro evidente. Esto no garantiza seguridad."};
 const LEAD = {
   do_not_continue: "Please don't open this link, and don't type anything into it.",
   caution: 'Be careful with this link.',
@@ -155,6 +158,7 @@ const LEAD = {
 };
 
 function notVisited(out) {
+  if (locale === 'es-US') return out.agent_guidance;
   return out.status === 'declined_by_human'
     ? "Okay, I didn't open it. One-time links are best checked by you, in the GhostFirst app."
     : "This looks like a one-time link, like a password reset, so I didn't open it. Please check it yourself in the GhostFirst app.";
@@ -168,17 +172,17 @@ function linkAnswer(out) {
   const details = out.reasons.slice(0, 3).map((r) => r.text);
   if (out.final_host) {
     const hops = out.redirects ? ` after ${out.redirects} redirect${out.redirects > 1 ? 's' : ''}` : '';
-    details.push(`It ends up at ${out.final_host}${hops}.`);
+    details.push(tr(`It ends up at ${out.final_host}${hops}.`, `Termina en ${out.final_host}. Redirecciones: ${out.redirects}.`));
   }
-  let text = `${LEAD[out.verdict] || LEAD.caution} ${out.summary || ''}`.trim();
+  let text = `${(locale === 'es-US' ? ES_LEAD : LEAD)[out.verdict] || tr(LEAD.caution, ES_LEAD.caution)} ${out.summary || ''}`.trim();
   const followUp = out.recommended_next_step === 'deep_check';
-  if (followUp) text += ' Do you want me to look again, as a phone and as a computer?';
+  if (followUp) text += tr(' Do you want me to look again, as a phone and as a computer?', ' ¿Quieres una revisión profunda como teléfono y computadora?');
   return { text, details, verdict: out.verdict, followUp };
 }
 
 function deepAnswer(out) {
   if (out.status !== 'checked') return linkAnswer(out);
-  const text = [LEAD[out.verdict] || LEAD.caution, out.comparison && `${out.comparison}.`, out.comparison_detail]
+  const text = [(locale === 'es-US' ? ES_LEAD : LEAD)[out.verdict] || tr(LEAD.caution, ES_LEAD.caution), out.comparison && `${out.comparison}.`, out.comparison_detail]
     .filter(Boolean).join(' ');
   const details = [...new Set([...out.differences, ...out.reasons.slice(0, 2).map((r) => r.text)])];
   return { text, details, verdict: out.verdict };
@@ -255,16 +259,16 @@ function askHuman(params) {
   const keys = Object.keys(props);
   const field = keys.length === 1 && props[keys[0]].type === 'boolean' ? keys[0] : null;
   if (!field) return Promise.resolve({ action: 'decline' });
-  renderCard({human_question:params.message,agent_guidance:params.message});
+  renderCard({locale,human_question:params.message,agent_guidance:params.message});
   bubble('assistant', params.message);
   say(params.message);
-  setState('idle', 'Waiting for your answer');
+  setState('idle', tr('Waiting for your answer','Esperando tu respuesta'));
   $('confirm').hidden = false;
   return new Promise((resolve) => {
     conversation.confirm = (yes) => {
       conversation.confirm = null;
       $('confirm').hidden = true;
-      setState('thinking', 'Checking…');
+      setState('thinking', tr('Checking…','Revisando…'));
       resolve(yes ? { action: 'accept', content: { [field]: true } } : { action: 'decline' });
     };
   });
@@ -274,7 +278,8 @@ const client = new McpClient(ENDPOINT, { onLog: log, onElicit: askHuman });
 
 async function run(tool, url) {
   conversation.busy = true;
-  setState('thinking', tool === 'deep_check' ? 'Visiting as three different visitors…' : 'Sending a disposable browser to the link…');
+  $('locale').disabled = true;
+  setState('thinking', tool === 'deep_check' ? tr('Visiting as three different visitors…','Visitando como tres visitantes…') : tr('Sending a disposable browser to the link…','Enviando un navegador desechable al enlace…'));
   try {
     let out = await client.callTool(tool, tool === 'check_shared_link' ? {} : { url });
     const deadline = Date.now() + 70000;
@@ -289,14 +294,15 @@ async function run(tool, url) {
     bubble('assistant', answer.text, answer.details, answer.verdict);
     renderCard(out);
     say([answer.text, ...answer.details, out.not_a_guarantee].filter(Boolean).join(' '));
-    setState(answer.verdict || 'idle', 'Ask me about another link.');
+    setState(answer.verdict || 'idle', tr('Ask me about another link.','Puedes consultar otro enlace.'));
   } catch (error) {
-    const text = "I couldn't check that link right now, so please don't open it yet.";
+    const text = tr("I couldn't check that link right now, so please don't open it yet.", "No pude revisar ese enlace. No lo abras todavía.");
     bubble('assistant', text, [String(error.message || error)]);
     say(text);
-    setState('idle', 'Something went wrong.');
+    setState('idle', tr('Something went wrong.','Ocurrió un error.'));
   } finally {
     conversation.busy = false;
+    $('locale').disabled = false;
   }
 }
 
@@ -306,11 +312,11 @@ async function hear(text) {
   bubble('you', text);
   if (conversation.confirm) {
     if (isYes(text) || isNo(text)) conversation.confirm(isYes(text));
-    else say('Please say yes or no.');
+    else say(tr('Please say yes or no.','Responde sí o no.'));
     return;
   }
   if (conversation.busy) return;
-  if (/shared|text message|grandson/i.test(text)) {
+  if (/compartido|compartida|nieto|shared|text message|grandson/i.test(text)) {
     conversation.lastUrl = conversation.sharedUrl;
     await run('check_shared_link');
     return;
@@ -323,8 +329,8 @@ async function hear(text) {
   }
   if (conversation.followUp && isNo(text)) {
     conversation.followUp = null;
-    bubble('assistant', 'Okay.');
-    say('Okay.');
+    bubble('assistant', tr('Okay.','De acuerdo.'));
+    say(tr('Okay.','De acuerdo.'));
     return;
   }
   if (conversation.lastUrl && ((conversation.followUp && isYes(text)) || wantsDeeper(text))) {
@@ -332,7 +338,7 @@ async function hear(text) {
     await run('deep_check', conversation.lastUrl);
     return;
   }
-  const help = "Tell me the link you want me to check. You can paste it, or read it out, like 'example dot com'.";
+  const help = tr("Tell me the link you want me to check. You can paste it, or read it out, like 'example dot com'.", "Comparte el enlace y di: revisa el enlace compartido. También puedes pegarlo aquí.");
   bubble('assistant', help);
   say(help);
 }
@@ -344,7 +350,7 @@ function setUpMic() {
     return;
   }
   const recognition = new Recognition();
-  recognition.lang = 'en-US';
+  recognition.lang = locale;
   recognition.interimResults = false;
   recognition.onresult = (event) => hear(event.results[0][0].transcript);
   recognition.onend = () => {
@@ -354,18 +360,34 @@ function setUpMic() {
   mic.addEventListener('click', () => {
     window.speechSynthesis?.cancel();
     mic.setAttribute('aria-pressed', 'true');
-    setState('listening', 'Listening…');
+    setState('listening', tr('Listening…','Escuchando…'));
+    recognition.lang = locale;
     recognition.start();
   });
 }
 
+function applyLocale() {
+  document.documentElement.lang = locale;
+  $('yes').textContent = tr('Yes','Sí');
+  $('share').textContent = tr('Share to GhostFirst','Compartir con GhostFirst');
+  $('check-shared').textContent = tr('Check shared link','Revisar enlace compartido');
+  $('say').placeholder = tr('Is this link safe? https://…','¿Puedes revisar este enlace? https://…');
+  $('mic').title = tr('Speak','Hablar');
+  $('mic').setAttribute('aria-label', tr('Speak','Hablar'));
+}
 async function start() {
+  $('locale').addEventListener('change', () => {
+    locale = $('locale').value;
+    window.speechSynthesis?.cancel();
+    applyLocale();
+  });
+  applyLocale();
   $('share').addEventListener('click', async () => {
     try {
       const out = await client.callTool('share_link', {url:$('shared-url').value.trim()});
       $('share-status').textContent = out.agent_guidance;
       if (out.status === 'shared') conversation.sharedUrl = $('shared-url').value.trim();
-    } catch (_) { $('share-status').textContent = 'The link could not be shared.'; }
+    } catch (_) { $('share-status').textContent = tr('The link could not be shared.','No se pudo compartir el enlace.'); }
   });
   $('check-shared').addEventListener('click', () => {
     if (!conversation.busy) { conversation.lastUrl = conversation.sharedUrl; run('check_shared_link'); }

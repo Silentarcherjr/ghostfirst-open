@@ -1,6 +1,7 @@
 'use strict';
 const el = (id) => document.getElementById(id);
 const labels = {do_not_continue: '⛔ Do not continue', caution: '⚠ Caution', no_obvious_danger: '✓ No suspicious behavior observed'};
+const esLabels = {do_not_continue:'⛔ No continúes', caution:'⚠ Ten cuidado', no_obvious_danger:'✓ No se observó comportamiento sospechoso'};
 let nextId = 2;
 let ready = false;
 function send(message) { window.parent.postMessage({jsonrpc:'2.0', ...message}, '*'); }
@@ -18,17 +19,20 @@ window.addEventListener('message', (event) => {
     adapt(message.params);
   } else if (ready && message.method === 'ui/notifications/tool-result') {
     const out = message.params?.structuredContent || {};
+    const spanish = out.locale === 'es-US';
+    document.documentElement.lang = spanish ? 'es-US' : 'en-US';
+    el('yes').textContent = spanish ? 'Sí' : 'Yes';
     const host = out.final_host || out.visitors?.find((v) => v.final_host)?.final_host || '';
     el('host').textContent = host;
     el('card').dataset.verdict = out.verdict || '';
-    el('verdict').textContent = labels[out.verdict] || 'GhostFirst';
+    el('verdict').textContent = (spanish ? esLabels : labels)[out.verdict] || 'GhostFirst';
     el('summary').textContent = out.summary || out.comparison_detail || out.agent_guidance || '';
     el('notice').textContent = out.not_a_guarantee || '';
     el('chips').replaceChildren();
     for (const reason of (out.reasons || []).slice(0, 4)) {
       const chip = document.createElement('li'); chip.textContent = reason.text; el('chips').append(chip);
     }
-    const question = out.human_question || (out.recommended_next_step === 'deep_check' ? 'Would you like a Deep Check?' : '');
+    const question = out.human_question || (out.recommended_next_step === 'deep_check' ? (spanish ? '¿Quieres una revisión profunda?' : 'Would you like a Deep Check?') : '');
     el('question').textContent = question; el('question').hidden = !question;
     el('actions').hidden = !question;
   }
