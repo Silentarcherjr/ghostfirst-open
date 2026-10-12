@@ -274,3 +274,6 @@ vocabulary grants no trust credit and must be reviewed with registry updates.
 See [the local accessibility review](ACCESSIBILITY.md) for keyboard, light/
 dark contrast, 200% zoom and complete spoken answers. No offline axe-core
 package was available; the review records what was actually checked.
+
+Owner-only integrations are skipped; [unconnected design notes](OWNER_DESIGNS.md)
+cover SES, Bedrock, Cognito OAuth and the Echo bridge.
