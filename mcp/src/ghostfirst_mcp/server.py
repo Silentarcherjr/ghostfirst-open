@@ -341,8 +341,6 @@ def build_server(client: Optional[GhostFirstClient] = None) -> MCPServer:
                 agent_guidance=not_visited, error_code=SENSITIVE_CODE,
             )
         owner = connection(ctx)
-        if owner is None:
-            return model(status="error", agent_guidance=_error_guidance("unknown_error"), error_code="session_required")
 
         async def work():
             try:
@@ -350,7 +348,8 @@ def build_server(client: Optional[GhostFirstClient] = None) -> MCPServer:
                 shaped = shape(result, locale)
                 shaped.locale = locale
                 host = shaped.final_host or next((v.final_host for v in getattr(shaped, "visitors", []) if v.final_host), None)
-                shaped.checked_earlier_today = owner.state["ghostfirst_inbox"].remember(host)
+                if owner is not None:
+                    shaped.checked_earlier_today = owner.state["ghostfirst_inbox"].remember(host)
                 if shaped.checked_earlier_today:
                     shaped.history_note = "You checked this site earlier today. This is a fresh check, not a guarantee."
                 return shaped
@@ -364,6 +363,11 @@ def build_server(client: Optional[GhostFirstClient] = None) -> MCPServer:
                 # leak exception text and never become a calm verdict.
                 return model(status="error", agent_guidance=_error_guidance("unknown_error"), error_code="check_failed")
 
+        if owner is None:
+            # Stateless protocol versions (2026-07-28 and later) have no
+            # session to own a job, so the check runs within the call, as
+            # before async jobs existed.
+            return await work()
         job_id = jobs.start(owner, work)
         if not job_id:
             return model(status="error", agent_guidance=_error_guidance("server_busy"), error_code="server_busy")

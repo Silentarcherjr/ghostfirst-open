@@ -86,3 +86,13 @@ async def test_finished_checks_never_block_new_ones(monkeypatch):
     assert jobs.get(owner, keys[-1]).result == 'result'
     assert jobs.get(owner, keys[0]) is None  # oldest finished result dropped
     await jobs.close_owner(owner)
+
+
+async def test_stateless_clients_get_the_result_in_the_same_call():
+    # Found live: the default client negotiates 2026-07-28 (no session), and
+    # check_link answered "session_required" instead of checking.
+    from test_server import fake_api
+    server = build_server(fake_api([httpx.Response(200, json=PHISHING_SCAN)], []))
+    async with Client(server) as client:
+        out = (await client.call_tool('check_link', {'url': 'https://a.example/'})).structured_content
+    assert out['status'] == 'checked' and out['verdict'] == 'do_not_continue' and out['job_id'] is None
