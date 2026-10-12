@@ -138,3 +138,9 @@ button:focus-visible,input:focus-visible { outline:3px solid var(--ink); outline
 
 select { min-width:64px; min-height:48px; font:inherit; color:var(--ink); background:var(--panel); }
 select:focus-visible { outline:3px solid var(--ink); outline-offset:3px; }
+.log .head { flex-wrap:wrap; overflow-wrap:anywhere; }
+.log .head span { min-width:0; }
+.bar { overflow-wrap:anywhere; }
+.phone button { max-width:100%; overflow-wrap:anywhere; }
+#share-status { overflow-wrap:anywhere; }
+.options label { display:inline-flex; align-items:center; min-height:48px; gap:8px; }

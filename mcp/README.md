@@ -243,3 +243,16 @@ from the web ES map and covered by the web-copy drift contract. Human
 elicitation, failures, history and safety guidance also use fixed Spanish.
 The simulator's EN/ES selector controls request metadata, speechSynthesis and
 SpeechRecognition language; voice availability depends on the local browser.
+
+## Red-team and accessibility evidence
+
+`tests/test_redteam.py` sends injected title/text, URL path/query, template
+parameters, reason/rule/profile codes and API errors through real MCP
+serialization. No instruction text survives. Display parameters accept only
+validated punycode hosts/IPs, fixed registry brand names, bounded numbers,
+fixed credential labels and allowlisted codes. Unknown values become a dash
+or a fixed fallback; malformed responses fail closed. The display brand
+vocabulary grants no trust credit and must be reviewed with registry updates.
+See [the local accessibility review](ACCESSIBILITY.md) for keyboard, light/
+dark contrast, 200% zoom and complete spoken answers. No offline axe-core
+package was available; the review records what was actually checked.

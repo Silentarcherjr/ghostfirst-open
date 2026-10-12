@@ -144,7 +144,7 @@ function findUrl(text) {
   return domain ? `https://${domain[0].replace(TRAILING, '')}` : null;
 }
 
-const isYes = (t) => /^\s*(sí|si|claro|yes|yeah|yep|sure|ok(ay)?|please|do it|go ahead)\b/i.test(t);
+const isYes = (t) => /^\s*(sí|si|claro|yes|yeah|yep|sure|ok(ay)?|please|do it|go ahead)(?:\s|[.!?,]|$)/i.test(t);
 const isNo = (t) => /^\s*(no|nope|don'?t|stop|cancel|never ?mind)\b/i.test(t);
 const wantsDeeper = (t) => /\b(profunda|profundo|otra vez|deep|deeper|again|closer|phone|computer)\b/i.test(t);
 
@@ -385,7 +385,7 @@ async function start() {
   $('share').addEventListener('click', async () => {
     try {
       const out = await client.callTool('share_link', {url:$('shared-url').value.trim()});
-      $('share-status').textContent = out.agent_guidance;
+      $('share-status').textContent = out.status === 'shared' ? tr('Link shared. You can now ask for a check.', 'Enlace compartido. Ya puedes pedir una revisión.') : out.agent_guidance;
       if (out.status === 'shared') conversation.sharedUrl = $('shared-url').value.trim();
     } catch (_) { $('share-status').textContent = tr('The link could not be shared.','No se pudo compartir el enlace.'); }
   });

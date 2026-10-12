@@ -17,6 +17,7 @@ import httpx
 # Hosted staging API. Override with GHOSTFIRST_API_URL.
 DEFAULT_API_URL = "https://ghostfirst.com"
 TIMEOUT_SECONDS = 60.0
+ERROR_CODES = {"rate_limited", "server_busy", "invalid_url", "blocked_destination", "service_unavailable", "request_timeout", "no_connection", "one_time_link_confirmation_required", "unknown_error"}
 
 
 class GhostFirstError(Exception):
@@ -76,5 +77,6 @@ class GhostFirstClient:
         header = response.headers.get("Retry-After")
         if retry_after is None and header and header.isdigit():
             retry_after = int(header)
+        code = code if code in ERROR_CODES else "unknown_error"
         raise GhostFirstError(code, status=response.status_code,
-                              retry_after_seconds=retry_after if isinstance(retry_after, int) else None)
+                              retry_after_seconds=min(86400, max(0, retry_after)) if type(retry_after) is int else None)

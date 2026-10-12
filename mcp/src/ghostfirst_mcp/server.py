@@ -22,6 +22,9 @@ from __future__ import annotations
 import argparse
 import functools
 import inspect
+import ipaddress
+import math
+import re
 import asyncio
 from pathlib import Path
 from typing import Annotated, Any, Literal, Optional, Sequence, Union
@@ -110,33 +113,59 @@ class HumanConfirmation(BaseModel):
     visit_anyway: bool = Field(description="Visit this possibly one-time link even though it may use it up?")
 
 
-def _host(url: Optional[str]) -> Optional[str]:
-    """ASCII (punycode) host only, so look-alike characters stay visible."""
-    if not url:
-        return None
-    host = urlsplit(url).hostname
-    if not host:
+# Display vocabulary only: copied registry names grant no trust credit.
+BRANDS = ('Banco General', 'Banistmo', 'BAC Credomatic', 'Caja de Ahorros', 'Banco Nacional de Panamá', 'Global Bank', 'Multibank', 'Credicorp Bank', 'PayPal', 'Microsoft', 'Apple', 'Google', 'Netflix', 'Amazon', 'Facebook', 'Instagram', 'WhatsApp', 'Mercado Libre', 'Mercado Pago', 'DHL', 'FedEx', 'UPS')
+RULES = {f"CAU-{i}" for i in range(10)} | {f"DNC-{i}" for i in range(1, 5)} | {"NSB-0"}
+PROFILES = {"android_mobile", "desktop_chrome", "desktop_firefox"}
+
+def _domain(value):
+    if not isinstance(value, str) or not value or len(value) > 253:
         return None
     try:
-        return host.encode("idna").decode("ascii")
+        return str(ipaddress.ip_address(value))
+    except ValueError:
+        pass
+    try:
+        host = value.encode("idna").decode("ascii").lower().rstrip(".")
     except UnicodeError:
-        return host
+        return None
+    if len(host) > 253 or not all(re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", part) for part in host.split(".")):
+        return None
+    return host
 
+def _host(url: Optional[str]) -> Optional[str]:
+    """ASCII host only. Invalid addresses never fall back to raw text."""
+    if not isinstance(url, str):
+        return None
+    try:
+        parsed = urlsplit(url)
+        return _domain(parsed.hostname) if parsed.scheme in {"http", "https"} else None
+    except ValueError:
+        return None
 
 def _fill(template: str, params: dict[str, Any]) -> str:
     class Missing(dict):
-        def __missing__(self, key: str) -> str:
+        def __missing__(self, key):
             return "—"
-
-    return template.format_map(Missing({k: str(v) for k, v in params.items()}))
-
+    safe = {}
+    for key, value in params.items():
+        if key in {"domain", "host", "from_domain", "brand_domain", "shortener"}:
+            safe[key] = _domain(value) or "—"
+        elif key == "brand":
+            safe[key] = value if isinstance(value, str) and value in BRANDS else "—"
+        elif key in {"count", "seconds", "changed"}:
+            safe[key] = str(value) if type(value) in {int, float} and math.isfinite(value) and 0 <= value <= 1000000 else "—"
+        elif key == "credential":
+            # Only fixed EN/ES credential labels may enter a sentence.
+            safe[key] = value if isinstance(value, str) and value in {*texts.CREDENTIALS.values(), *texts.ES_CREDENTIALS.values()} else "—"
+    return template.format_map(Missing(safe))
 
 def _reasons(verdict: dict[str, Any], locale="en-US") -> list[Reason]:
     out = []
     for finding in verdict.get("reasons", []):
         template = texts.table("FINDINGS", locale).get(finding.get("code", ""))
         text = _fill(template, finding.get("params", {})) if template else texts.fixed("Additional evidence.", locale)
-        out.append(Reason(code=finding.get("code", ""), severity=finding.get("severity", "info"), text=text))
+        out.append(Reason(code=finding["code"] if finding.get("code") in texts.FINDINGS else "unknown_evidence", severity=finding.get("severity") if finding.get("severity") in {"high", "medium", "low", "info"} else "info", text=text))
     return out
 
 
@@ -164,7 +193,7 @@ def link_check_from_scan(result: dict[str, Any], locale="en-US") -> LinkCheck:
         agent_guidance=texts.table("GUIDANCE", locale).get(state, texts.table("GUIDANCE", locale)["caution"]),
         summary=_summary(verdict, locale),
         reasons=_reasons(verdict, locale),
-        rules=verdict.get("rules", []),
+        rules=[r for r in verdict.get("rules", []) if isinstance(r, str) and r in RULES],
         final_host=_host(result.get("final_url")),
         redirects=max(0, len(result.get("redirect_chain", [])) - 1),
         requested=_requested(result.get("forms", {})),
@@ -185,7 +214,7 @@ def deep_check_from_result(result: dict[str, Any], locale="en-US") -> DeepCheck:
     for wisp in result.get("wisps", []):
         scan = wisp.get("result")
         visitors.append(VisitorProfile(
-            profile=wisp.get("profile", "unknown"),
+            profile=wisp.get("profile") if wisp.get("profile") in PROFILES else "unknown",
             final_host=_host(scan.get("final_url")) if scan else None,
             reached_page=scan is not None,
             requested=_requested(scan.get("forms", {})) if scan else [],
@@ -296,6 +325,7 @@ def build_server(client: Optional[GhostFirstClient] = None) -> MCPServer:
         return owner
 
     async def run(kind: str, url: str, consent: Consent, ctx: Context):
+        locale = client_locale(ctx)
         call = client.scan if kind == "scan" else client.deep_check
         shape = link_check_from_scan if kind == "scan" else deep_check_from_result
         model = LinkCheck if kind == "scan" else DeepCheck
@@ -317,8 +347,8 @@ def build_server(client: Optional[GhostFirstClient] = None) -> MCPServer:
         async def work():
             try:
                 result = await asyncio.wait_for(call(url, confirm_sensitive_link=confirmed is True), JOB_TIMEOUT)
-                shaped = shape(result, client_locale(ctx))
-                shaped.locale = client_locale(ctx)
+                shaped = shape(result, locale)
+                shaped.locale = locale
                 host = shaped.final_host or next((v.final_host for v in getattr(shaped, "visitors", []) if v.final_host), None)
                 shaped.checked_earlier_today = owner.state["ghostfirst_inbox"].remember(host)
                 if shaped.checked_earlier_today:
