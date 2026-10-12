@@ -190,7 +190,7 @@ async def test_ordinary_links_never_ask_the_human() -> None:
 async def test_tools_are_listed_as_read_only() -> None:
     async with Client(build_server(fake_api([], [])), mode="legacy") as client:
         tools = {tool.name: tool for tool in (await client.list_tools()).tools}
-    assert set(tools) == {"check_link", "deep_check", "get_check_result"}
+    assert set(tools) == {"check_link", "deep_check", "get_check_result", "check_shared_link", "share_link"}
     # The agent cannot pass a confirmation: only `url` is an argument.
     assert set(tools["check_link"].input_schema["properties"]) == {"url"}
     assert tools["check_link"].annotations.read_only_hint is True

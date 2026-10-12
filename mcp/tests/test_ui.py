@@ -10,7 +10,7 @@ def anyio_backend(): return 'asyncio'
 async def test_apps_resource_and_tool_linkage():
     async with Client(build_server(), mode='legacy') as client:
         tools = (await client.list_tools()).tools
-        assert all(t.meta['ui']['resourceUri'] == ui.URI for t in tools)
+        assert all(t.meta['ui']['resourceUri'] == ui.URI for t in tools if t.name != 'share_link')
         resource = await client.read_resource(ui.URI)
         assert resource.contents[0].mime_type == ui.MIME
         assert resource.contents[0].text == ui.HTML

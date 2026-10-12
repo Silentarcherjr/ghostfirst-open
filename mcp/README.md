@@ -217,3 +217,18 @@ the reasons, final host, and non-guarantee without depending on the card.
 Design references: [Amazon layout](https://developer.amazon.com/docs/alexaplus/add-ons/mcp-addon-layout-and-rendering.html),
 [accessibility](https://developer.amazon.com/docs/alexaplus/add-ons/mcp-addon-accessibility.html),
 [MCP Apps specification](https://github.com/modelcontextprotocol/ext-apps/blob/main/specification/2026-01-26/apps.mdx).
+
+### Shared inbox (local simulator)
+
+The phone-message panel's Share button calls the app-only `share_link`. It
+stores one URL in the server's verified MCP connection, in RAM for 15 minutes;
+sharing never visits or confirms a one-time link. `check_shared_link()` has no
+URL argument and snapshots the latest share before human elicitation. Other
+sessions cannot read it. Disconnect/expiry removes it. The UI extension's
+app-only visibility is a host presentation rule, not an authentication boundary.
+
+At most ten final punycode hosts (no paths, titles, or credentials) remain in
+the same session for 24 hours, cleared at disconnect. Repeated checks on the
+same UTC date add the fixed “you checked this site earlier today” sentence;
+results always come from a fresh visit. This is a simulator share flow, not a
+native phone share extension or account-wide inbox.

@@ -276,7 +276,7 @@ async function run(tool, url) {
   conversation.busy = true;
   setState('thinking', tool === 'deep_check' ? 'Visiting as three different visitors…' : 'Sending a disposable browser to the link…');
   try {
-    let out = await client.callTool(tool, { url });
+    let out = await client.callTool(tool, tool === 'check_shared_link' ? {} : { url });
     const deadline = Date.now() + 70000;
     while (out.status === 'checking' && Date.now() < deadline) {
       await new Promise((resolve) => setTimeout(resolve, 500));
@@ -285,6 +285,7 @@ async function run(tool, url) {
     if (out.status === 'checking') throw new Error('Check timed out');
     const answer = tool === 'deep_check' ? deepAnswer(out) : linkAnswer(out);
     conversation.followUp = answer.followUp ? 'deep_check' : null;
+    if (out.history_note) answer.details.unshift(out.history_note);
     bubble('assistant', answer.text, answer.details, answer.verdict);
     renderCard(out);
     say([answer.text, ...answer.details, out.not_a_guarantee].filter(Boolean).join(' '));
@@ -309,6 +310,11 @@ async function hear(text) {
     return;
   }
   if (conversation.busy) return;
+  if (/shared|text message|grandson/i.test(text)) {
+    conversation.lastUrl = conversation.sharedUrl;
+    await run('check_shared_link');
+    return;
+  }
   const url = findUrl(text);
   if (url) {
     conversation.lastUrl = url;
@@ -354,6 +360,16 @@ function setUpMic() {
 }
 
 async function start() {
+  $('share').addEventListener('click', async () => {
+    try {
+      const out = await client.callTool('share_link', {url:$('shared-url').value.trim()});
+      $('share-status').textContent = out.agent_guidance;
+      if (out.status === 'shared') conversation.sharedUrl = $('shared-url').value.trim();
+    } catch (_) { $('share-status').textContent = 'The link could not be shared.'; }
+  });
+  $('check-shared').addEventListener('click', () => {
+    if (!conversation.busy) { conversation.lastUrl = conversation.sharedUrl; run('check_shared_link'); }
+  });
   $('ask').addEventListener('submit', (event) => {
     event.preventDefault();
     const text = $('say').value;

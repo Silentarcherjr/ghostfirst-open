@@ -132,3 +132,6 @@ button:disabled { opacity: 0.5; cursor: default; }
 button { min-height:48px; min-width:48px; }
 button:focus-visible,input:focus-visible { outline:3px solid var(--ink); outline-offset:3px; }
 @media(max-width:480px) { .ask { flex-wrap:wrap; } .ask input { flex-basis:100%; } }
+
+.phone { border:2px solid var(--muted); padding:16px; border-radius:20px; margin-bottom:20px; }
+.phone h2 { font-size:20px; } .phone input { width:100%; min-height:48px; font:inherit; color:var(--ink); background:var(--bg); border:1px solid var(--muted); padding:10px; }

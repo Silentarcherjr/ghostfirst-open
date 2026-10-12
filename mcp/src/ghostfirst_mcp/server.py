@@ -36,11 +36,12 @@ from starlette.responses import Response
 
 from . import texts, ui
 from .api import GhostFirstClient, GhostFirstError, api_url_from_env
+from .inbox import Inbox
 from .jobs import JOB_TIMEOUT, Jobs
 from .sensitive import one_time_link_indicators
 
 State = Literal["do_not_continue", "caution", "no_obvious_danger"]
-Status = Literal["checking", "checked", "needs_human_confirmation", "declined_by_human", "error"]
+Status = Literal["shared", "checking", "checked", "needs_human_confirmation", "declined_by_human", "error"]
 
 INSTRUCTIONS = (
     "Call check_link before opening, following, summarizing by visiting, or submitting "
@@ -69,6 +70,8 @@ class LinkCheck(BaseModel):
     final_host: Optional[str] = None
     redirects: int = 0
     requested: list[str] = Field(default_factory=list, description="Sensitive inputs the page asked for.")
+    checked_earlier_today: bool = False
+    history_note: Optional[str] = None
     page_changed_after_load: bool = False
     recommended_next_step: Optional[Literal["deep_check"]] = None
     error_code: Optional[str] = None
@@ -265,6 +268,8 @@ def build_server(client: Optional[GhostFirstClient] = None) -> MCPServer:
         if owner is not None and "ghostfirst_jobs" not in owner.state:
             owner.state["ghostfirst_jobs"] = True
             owner.exit_stack.push_async_callback(jobs.close_owner, owner)
+            owner.state["ghostfirst_inbox"] = Inbox()
+            owner.exit_stack.callback(owner.state["ghostfirst_inbox"].clear)
         return owner
 
     async def run(kind: str, url: str, consent: Consent, ctx: Context):
@@ -289,7 +294,12 @@ def build_server(client: Optional[GhostFirstClient] = None) -> MCPServer:
         async def work():
             try:
                 result = await asyncio.wait_for(call(url, confirm_sensitive_link=confirmed is True), JOB_TIMEOUT)
-                return shape(result)
+                shaped = shape(result)
+                host = shaped.final_host or next((v.final_host for v in getattr(shaped, "visitors", []) if v.final_host), None)
+                shaped.checked_earlier_today = owner.state["ghostfirst_inbox"].remember(host)
+                if shaped.checked_earlier_today:
+                    shaped.history_note = "You checked this site earlier today. This is a fresh check, not a guarantee."
+                return shaped
             except GhostFirstError as error:
                 if error.code == SENSITIVE_CODE:
                     return model(status="needs_human_confirmation", agent_guidance=not_visited, error_code=SENSITIVE_CODE)
@@ -341,6 +351,39 @@ def build_server(client: Optional[GhostFirstClient] = None) -> MCPServer:
         await ctx.report_progress(1 if job.result else 0, 1, "Check complete." if job.result else "Still checking.")
         return DeepCheck.model_validate(job.result.model_dump()) if job.result else DeepCheck(status="checking", job_id=job_id,
                                      agent_guidance="Still checking. Poll again; do not open the link yet.")
+
+    @server.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint=False),
+                 meta={"ui": {"visibility": ["app"]}})
+    async def share_link(url: str, ctx: Context) -> LinkCheck:
+        """App-only inbox ingestion after a human presses Share. Stores the link
+        in this MCP session for 15 minutes; does not visit it or grant consent."""
+        owner = connection(ctx)
+        if owner is None or not owner.state["ghostfirst_inbox"].share(url):
+            return LinkCheck(status="error", agent_guidance=_error_guidance("invalid_url"), error_code="invalid_url")
+        return LinkCheck(status="shared", agent_guidance="Link shared to this session. Ask check_shared_link to check it; do not open it yet.")
+
+    @server.tool(annotations=read_only, meta={"ui": {"resourceUri": ui.URI}})
+    async def check_shared_link(ctx: Context) -> LinkCheck:
+        """Check the latest link the human shared to this session, without URL
+        dictation. One-time links need human elicitation before a job starts.
+        No shared link or an expired inbox fails closed."""
+        owner = connection(ctx)
+        url = owner.state["ghostfirst_inbox"].latest() if owner else None
+        if not url:
+            return LinkCheck(status="error", agent_guidance="No shared link is available. Ask the human to share one; do not open anything.", error_code="no_shared_link")
+        # Snapshot before awaiting consent: a later Share cannot replace the
+        # address for which the human is answering.
+        consent = NoQuestion(reason="not_one_time")
+        if one_time_link_indicators(url):
+            caps = ctx.client_capabilities
+            if caps is None or caps.elicitation is None:
+                consent = NoQuestion(reason="client_cannot_ask")
+            else:
+                consent = await ctx.elicit(
+                    "This link looks like a one-time link. Checking it may use it up. Should GhostFirst visit it anyway?",
+                    HumanConfirmation,
+                )
+        return await run("scan", url, consent, ctx)
 
     @server.resource(ui.URI, mime_type=ui.MIME, meta=ui.META)
     def verdict_card():
