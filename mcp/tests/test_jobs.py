@@ -64,3 +64,25 @@ async def test_capacity_is_bounded(monkeypatch):
     assert jobs.start(owner, pending)
     assert jobs.start(owner, pending) is None
     await jobs.close_owner(owner)
+
+
+async def test_finished_checks_never_block_new_ones(monkeypatch):
+    # Found in review: finished results counted toward the limits for 15
+    # minutes, so a ninth check in one session (or 128 across sessions)
+    # was refused as "busy".
+    import ghostfirst_mcp.jobs as module
+    monkeypatch.setattr(module, 'MAX_SESSION_JOBS', 2)
+    monkeypatch.setattr(module, 'MAX_STORED', 3)
+    jobs = Jobs(); owner = object()
+    async def done():
+        return 'result'
+    keys = []
+    for _ in range(5):
+        key = jobs.start(owner, done)
+        assert key
+        keys.append(key)
+        await asyncio.sleep(0)
+    assert len(jobs.entries) <= 3
+    assert jobs.get(owner, keys[-1]).result == 'result'
+    assert jobs.get(owner, keys[0]) is None  # oldest finished result dropped
+    await jobs.close_owner(owner)

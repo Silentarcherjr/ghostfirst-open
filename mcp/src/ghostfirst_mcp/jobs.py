@@ -8,8 +8,12 @@ from typing import Any, Awaitable, Callable
 
 JOB_TTL = 900
 JOB_TIMEOUT = 65
+# Limits on checks *running* at once. Finished results are kept for polling
+# until JOB_TTL but never block new checks; past MAX_STORED the oldest
+# finished results are dropped first.
 MAX_JOBS = 128
 MAX_SESSION_JOBS = 8
+MAX_STORED = 1024
 
 
 @dataclass
@@ -25,8 +29,15 @@ class Jobs:
         self.entries: dict[str, Job] = {}
 
     def start(self, owner: Any, run: Callable[[], Awaitable[Any]]) -> str | None:
-        if len(self.entries) >= MAX_JOBS or sum(j.owner is owner for j in self.entries.values()) >= MAX_SESSION_JOBS:
+        running = [j for j in self.entries.values() if not j.task.done()]
+        if len(running) >= MAX_JOBS or sum(j.owner is owner for j in running) >= MAX_SESSION_JOBS:
             return None
+        if len(self.entries) >= MAX_STORED:
+            finished = [k for k, j in self.entries.items() if j.task.done()]
+            for key in finished[: len(self.entries) - MAX_STORED + 1]:
+                self.remove(key)
+            if len(self.entries) >= MAX_STORED:
+                return None
         job_id = token_urlsafe(24)
 
         async def work():
