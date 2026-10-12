@@ -5,8 +5,8 @@ opens or follows it**. GhostFirst sends a disposable remote browser (a *Wisp*)
 to the link, away from the agent's machine and the user's device. It returns
 a verdict with the evidence behind it.
 
-Deterministic rules decide the verdict. This server only reshapes the API
-result for agents. No model output can set or change a verdict.
+Deterministic rules decide the verdict. The MCP layer enforces human consent, filters hostile evidence, owns async
+session jobs and the shared-link inbox, and supplies fixed voice/card data. No model output can set or change a verdict.
 
 ## Tools
 
@@ -14,6 +14,9 @@ result for agents. No model output can set or change a verdict.
 |---|---|---|
 | `check_link(url)` | Visits the link once. Returns `verdict` (`do_not_continue`, `caution`, `no_obvious_danger`), `reasons`, `agent_guidance`, and `recommended_next_step` | immediate acknowledgement; visit finishes in seconds |
 | `deep_check(url)` | Visits as a phone, a computer, and another browser, and reports whether they were shown different things (cloaking) | immediate acknowledgement; visit finishes in seconds |
+| `get_check_result(job_id)` | Polls a job owned by this session; never opens a URL | immediate |
+| `check_shared_link()` | Checks the latest human-shared link without URL dictation; same consent gate | immediate acknowledgement after any human question |
+| `share_link(url)` | App-only inbox ingestion, no visit or consent | immediate |
 
 Both visit tools are read-only and take only `url`. They return
 `status: checking` with an opaque `job_id`, without a verdict. Poll the new
@@ -50,7 +53,18 @@ uses 2025-11-25); stateless 2026-era requests fail closed. The pinned MCP
 
 ## Try it (judges)
 
-**Hosted:** open <https://mcp.ghostfirst.com> (the simulator; MCP endpoint
+**Task A is local and pending review.** The existing hosted build has not
+been updated with these changes. For a provider-free rehearsal:
+
+```bash
+.venv/bin/python tool/fake_ui_server.py
+```
+
+Open <http://127.0.0.1:8799/>, press Share, then Check shared link (or say
+“check the link from my grandson’s text”). This uses fixed fake evidence,
+not a real scan. The EN/ES selector controls speech and request locale.
+
+**Existing hosted build:** open <https://mcp.ghostfirst.com> (the simulator; MCP endpoint
 `https://mcp.ghostfirst.com/mcp`).
 
 **Locally, against the hosted GhostFirst API** (needs
@@ -109,7 +123,7 @@ uv pip install --python .venv/bin/python -e ".[test]"
 
 ### Streamable HTTP and the voice simulator
 
-`--http` serves MCP (protocol 2025-11-25 and later) at `/mcp` with stateful
+`--http` serves MCP (stateful protocol 2025-11-25 tested) at `/mcp` with stateful
 sessions, so the one-time-link question still reaches the human: the
 `elicitation/create` request travels on the open `tools/call` stream.
 
@@ -160,8 +174,12 @@ Example client configuration (for example, Claude Desktop):
 ## Privacy
 
 The link you check is sent to the GhostFirst API, which opens it in an
-isolated remote browser. Screenshots expire automatically, and no check
-history is stored. This server keeps nothing.
+isolated remote browser. The card never receives screenshots. The MCP process stores session jobs
+and the latest shared URL for 15 minutes and up to ten final hosts for
+24 hours in RAM, removed on session deletion/expiry. It writes no check
+history to disk and has no account or cross-session memory. Closing a
+browser tab alone does not necessarily delete its HTTP session; TTL remains
+the upper bound when the client does not send DELETE.
 
 The simulator's voice input uses the browser's own speech recognition; some
 browsers send the audio to their vendor's speech service. Typing avoids
@@ -173,7 +191,7 @@ that.
 .venv/bin/python -m pytest -q
 ```
 
-The tests use a fake API, so they make no network calls (19 tests). The
+The tests use a fake API, so they make no external/provider calls (33 tests). The
 server tests drive the real MCP client in memory; the HTTP tests run the
 Streamable HTTP app on a local port. They cover:
 
@@ -194,9 +212,9 @@ HTTP MCP server with a fake API that deliberately waits 5 seconds. It measures
 
 | Tool | Median | p95 | Maximum |
 |---|---:|---:|---:|
-| check_link | 2.03 ms | 2.50 ms | 14.37 ms |
-| deep_check | 1.48 ms | 1.81 ms | 2.21 ms |
-| get_check_result (pending) | 1.31 ms | 1.61 ms | 2.13 ms |
+| check_link | 1.45 ms | 1.82 ms | 14.04 ms |
+| deep_check | 1.26 ms | 1.39 ms | 1.49 ms |
+| get_check_result (pending) | 1.12 ms | 1.23 ms | 1.33 ms |
 
 This measures local acknowledgements, not completion time or Alexa/cloud
 network latency. No real API/provider visit is used by the measurement.
