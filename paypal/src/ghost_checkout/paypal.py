@@ -8,9 +8,17 @@ from paypalserversdk.models.order_request import OrderRequest
 from .evidence import ClosedError
 
 
+# Where PayPal sends the buyer after approval. Without it, the sandbox
+# approval page reloads itself instead of finishing.
+RETURN_URL='https://ghostfirst.com/?paypal=approved'
+CANCEL_URL='https://ghostfirst.com/?paypal=cancelled'
+
+
 def order_body(merchant, item, amount, currency):
     body={'intent':'CAPTURE','purchase_units':[{'description':item,
-          'amount':{'currency_code':currency,'value':amount},'payee':{'merchant_id':merchant}}]}
+          'amount':{'currency_code':currency,'value':amount},'payee':{'merchant_id':merchant}}],
+          'payment_source':{'paypal':{'experience_context':{'return_url':RETURN_URL,'cancel_url':CANCEL_URL,
+              'user_action':'PAY_NOW','shipping_preference':'NO_SHIPPING'}}}}
     # Exercise the actual installed APIMatic model serializer even offline.
     return json.loads(APIHelper.json_serialize(OrderRequest.from_dictionary(body)))
 
@@ -77,9 +85,14 @@ class MockPayPal:
         if order['status'] != 'APPROVED': raise ClosedError('buyer_approval_required')
         order['status']='COMPLETED'
         for i,unit in enumerate(order['purchase_units']):
-            unit['payments']={'captures':[{'id':'MOCK-CAPTURE-'+order_id+'-'+str(i),'status':'COMPLETED'}]}
+            unit['payments']={'captures':[{'id':'MOCK-CAPTURE-'+order_id+'-'+str(i),'status':'COMPLETED',
+                                           'amount':deepcopy(unit['amount'])}]}
             if self.mismatch: unit['payee']['merchant_id']='MOCK_WRONG_MERCHANT'
-        return deepcopy(order)
+        # Same shape as PayPal's capture response: purchase units carry the
+        # captures (with their amounts) but no payee and no order-level amount.
+        return {'id':order['id'],'status':order['status'],'purchase_units':[
+            {'reference_id':u.get('reference_id','default'),'payments':deepcopy(u['payments'])}
+            for u in order['purchase_units']]}
 
     async def refund(self, capture_id, request_id):
         self._guard('refund');self.refunds.append(capture_id)

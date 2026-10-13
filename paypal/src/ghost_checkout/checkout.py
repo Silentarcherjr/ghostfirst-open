@@ -101,6 +101,13 @@ class Checkout:
                     and units[0]['amount'].get('value')==bound.amount)
         except (KeyError, TypeError): return False
 
+    def captured_amount_matches(self, raw, bound):
+        try:
+            amounts=[c['amount'] for unit in raw['purchase_units'] for c in unit['payments']['captures']]
+            if not amounts or any(a.get('currency_code')!=bound.currency for a in amounts): return False
+            return sum(Decimal(a['value']) for a in amounts)==Decimal(bound.amount)
+        except (KeyError, TypeError, InvalidOperation): return False
+
     def capture_ids(self, raw):
         try:
             captures=[c for unit in raw['purchase_units'] for c in unit['payments']['captures']]
@@ -140,7 +147,11 @@ class Checkout:
                 after=await asyncio.wait_for(self.paypal.get(order_id),30)
                 if after.get('id')!=order_id or after.get('status')!='COMPLETED' or not self.matches(after,bound):
                     raise ClosedError('payee_mismatch')
-                if captured.get('id')!=order_id or captured.get('status')!='COMPLETED' or not self.matches(captured,bound):
+                # The capture response has no payee or order-level amount: the
+                # payee is verified on the order (GET, above), and the amount on
+                # the captures themselves.
+                if (captured.get('id')!=order_id or captured.get('status')!='COMPLETED'
+                        or not self.captured_amount_matches(captured,bound)):
                     raise ClosedError('payee_mismatch')
                 if self.capture_ids(captured)!=self.capture_ids(after):
                     raise ClosedError('capture_not_verified')
