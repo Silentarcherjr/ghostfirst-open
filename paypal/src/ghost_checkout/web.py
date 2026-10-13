@@ -10,6 +10,7 @@ from starlette.applications import Starlette
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
+from .store_fixtures import render_mock_store
 from .agent import Purchase
 from .api import RecordedGhost
 from .demo_data import records, BASE
@@ -107,6 +108,12 @@ def create_app():
         if name not in {'index.html','styles.css','app.js','paypal-v6-mock.js'}: return Response(status_code=404)
         return Response(UI.joinpath(name).read_bytes(),media_type={'.html':'text/html','.css':'text/css','.js':'text/javascript'}[Path(name).suffix])
 
+    async def shop(request):
+        name=request.path_params['name']
+        allowed={'corner-bakery.html','riverside-deals.html','flash-sale.html','shop.css','shop.js','paypal-sdk-v6-mock.js'}
+        if name not in allowed: return Response(status_code=404)
+        return Response(render_mock_store((Path(__file__).parent/'stores'/name).read_text()).encode(),media_type={'.html':'text/html','.css':'text/css','.js':'text/javascript'}[Path(name).suffix])
+
     def verify(request):
         payload=json.loads(request.content)
         success=payload.get('transmission_sig')=='MOCK-VALID-SIGNATURE'
@@ -115,7 +122,7 @@ def create_app():
     app=Starlette(lifespan=lifespan,routes=[Route('/',static),Route('/api/session',start_session),
          Route('/api/state',state),Route('/api/chat',purchase,methods=['POST']),
          Route('/api/confirm',confirm,methods=['POST']),Route('/api/mock-approve',approve,methods=['POST']),
-         *webhook_app(hooks).routes,Route('/{name}',static)])
+         *webhook_app(hooks).routes,Route('/shop/{name}',shop),Route('/{name}',static)])
     app.add_middleware(TrustedHostMiddleware,allowed_hosts=['127.0.0.1','localhost','[::1]','*.app.github.dev'])
     async def boundary(request,call_next):
         try: response=await call_next(request)

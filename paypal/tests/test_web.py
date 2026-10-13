@@ -69,3 +69,14 @@ async def test_fixed_ui_color_pairs_have_wcag_aa_contrast():
     for foreground,background in [('193048','eaf0f5'),('193048','ffffff'),('ffffff','174a78'),('214d38','eaf0f5'),('344b60','eaf0f5')]:
         a,b=sorted((lum(foreground),lum(background)))
         assert (b+.05)/(a+.05)>=4.5
+
+
+async def test_public_shop_pages_are_local_mock_assets_and_never_submit():
+    app=create_app()
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url='http://127.0.0.1') as client:
+        for store in ('corner-bakery','riverside-deals','flash-sale'):
+            response=await client.get('/shop/'+store+'.html')
+            assert response.status_code==200 and 'GHOSTFIRST DEMO' in response.text
+            assert '<script' in response.text and '<script src="https://' not in response.text
+            assert 'form-action \'none\'' in response.headers['content-security-policy']
+        assert (await client.get('/shop/../../LICENSE')).status_code==404

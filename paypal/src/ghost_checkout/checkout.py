@@ -99,6 +99,19 @@ class Checkout:
             return len(units)==1 and units[0]['payee']['merchant_id']==bound.merchant and units[0]['amount']=={'currency_code':bound.currency,'value':bound.amount}
         except (KeyError, TypeError): return False
 
+    def capture_ids(self, raw):
+        try:
+            captures=[c for unit in raw['purchase_units'] for c in unit['payments']['captures']]
+            if not captures or len(captures)>10:
+                raise ValueError()
+            if any(c.get('status')!='COMPLETED' or not isinstance(c.get('id'),str) or not ID.fullmatch(c['id']) for c in captures):
+                raise ValueError()
+            ids={c['id'] for c in captures}
+            if len(ids)!=len(captures): raise ValueError()
+            return ids
+        except (KeyError,TypeError,ValueError,AttributeError):
+            raise ClosedError('capture_not_verified') from None
+
     async def order_status(self, owner, order_id):
         bound=self.bound(owner,order_id)
         raw=await asyncio.wait_for(self.paypal.get(order_id),30)
@@ -127,6 +140,8 @@ class Checkout:
                     raise ClosedError('payee_mismatch')
                 if captured.get('id')!=order_id or captured.get('status')!='COMPLETED' or not self.matches(captured,bound):
                     raise ClosedError('payee_mismatch')
+                if self.capture_ids(captured)!=self.capture_ids(after):
+                    raise ClosedError('capture_not_verified')
                 bound.state='captured'
                 return {'status':'captured','order_id':order_id,'observed_merchant':[bound.merchant]}
             except Exception:

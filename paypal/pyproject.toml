@@ -9,6 +9,8 @@ dependencies = ["mcp==2.2.0", "httpx>=0.28,<1", "paypal-server-sdk==2.0.0", "uvi
 [project.optional-dependencies]
 test = ["pytest>=8"]
 [project.scripts]
+ghost-checkout-demo = "ghost_checkout.demo:main"
+ghost-checkout-wisp-lite = "ghost_checkout.wisp_lite:main"
 ghost-checkout-mcp = "ghost_checkout.server:main"
 [build-system]
 requires = ["hatchling"]

@@ -112,3 +112,7 @@ def main():
     from .demo_data import records
     from .api import RecordedGhost
     build_server(RecordedGhost(records())).run(transport='stdio')
+
+
+if __name__ == '__main__':
+    main()

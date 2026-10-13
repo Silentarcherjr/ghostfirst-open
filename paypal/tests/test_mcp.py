@@ -66,3 +66,12 @@ async def test_no_elicitation_no_order_and_stateless_check_fallback():
         assert out['status']=='checked' # current protocol is stateless: no orphan job.
         refused=(await client.call_tool('start_checkout',{'store_url':BASE+'corner-bakery.html','item':'Bread','amount':'2.00','currency':'USD'})).structured_content
         assert refused['error_code']=='session_required'
+
+
+async def test_installed_stdio_entrypoint_uses_mocks_only():
+    import sys
+    from mcp import StdioServerParameters
+    params=StdioServerParameters(command=sys.executable,args=['-m','ghost_checkout.server'])
+    async with Client(params,mode='legacy') as client:
+        output=await checked(client,BASE+'corner-bakery.html')
+        assert output['status']=='checked' and output['observed_merchant']==['DEMO_BAKERY_MERCHANT']

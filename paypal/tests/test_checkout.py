@@ -187,3 +187,33 @@ async def test_capture_timeout_and_post_get_failure_never_report_success():
     with pytest.raises(ClosedError,match='manual_review_required'):
         await service.complete_checkout(owner,result['order_id'])
     assert paypal.calls.count('capture')==1
+
+
+async def test_sdk_adapter_operation_mapping_and_http_failure():
+    calls=[]
+    def call(options):
+        calls.append(options)
+        return SimpleNamespace(status_code=200,body={'status':'COMPLETED'})
+    adapter=ServerSDKPayPal(SimpleNamespace(get_order=call,capture_order=call),SimpleNamespace(refund_captured_payment=call))
+    await adapter.get('MOCK-ORDER')
+    await adapter.capture('MOCK-ORDER','MOCK-CAPTURE-REQUEST')
+    await adapter.refund('MOCK-CAPTURE','MOCK-REFUND-REQUEST')
+    assert calls==[{'id':'MOCK-ORDER'}, {'id':'MOCK-ORDER','paypal_request_id':'MOCK-CAPTURE-REQUEST'},
+                   {'capture_id':'MOCK-CAPTURE','paypal_request_id':'MOCK-REFUND-REQUEST'}]
+    adapter.orders.get_order=lambda options:SimpleNamespace(status_code=503,body={'page_text':'UNTRUSTED'})
+    with pytest.raises(ClosedError,match='paypal_failed'): await adapter.get('MOCK-ORDER')
+
+
+async def test_completed_order_without_capture_evidence_fails_closed():
+    service,paypal,owner=setup()
+    order=await service.start_checkout(owner,BASE+'corner-bakery.html','Bread','2.00','USD')
+    await paypal.approve(order['order_id'])
+    original=paypal.capture
+    async def malformed(*args):
+        result=await original(*args)
+        del result['purchase_units'][0]['payments']
+        return result
+    paypal.capture=malformed
+    with pytest.raises(ClosedError,match='capture_uncertain_manual_review'):
+        await service.complete_checkout(owner,order['order_id'])
+    assert service.orders[order['order_id']].state=='manual_review'
