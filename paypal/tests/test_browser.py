@@ -15,7 +15,7 @@ pytestmark=pytest.mark.skipif(os.environ.get('GHOST_CHECKOUT_BROWSER_TESTS')!='1
 def browser_url():
     with socket.socket() as sock:
         sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
-    process=subprocess.Popen([sys.executable,'-m','ghost_checkout.demo','--port',str(port)],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+    process=subprocess.Popen([sys.executable,'-m','ghost_checkout.demo','--port',str(port)],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,env={**os.environ,'GHOST_CHECKOUT_MODE':'offline'})
     base=f'http://127.0.0.1:{port}'
     try:
         for _ in range(100):

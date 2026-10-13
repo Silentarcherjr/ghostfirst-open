@@ -11,8 +11,8 @@ function show(result){
   if(result.evidence){const ev=result.evidence;const labels={no_obvious_danger:'No suspicious behavior observed',caution:'Caution',do_not_continue:'Do not continue'};
     $('verdict').textContent=labels[ev.verdict]||'Check did not complete';$('merchant').textContent='Observed merchant: '+(ev.observed_merchant||[]).join(', ');
     $('reasons').replaceChildren();for(const reason of ev.reasons||[]){const li=document.createElement('li');li.textContent=reason.text;$('reasons').append(li);} $('why').open=true;}
-  if(result.status==='buyer_approval_required'){order=result.order;$('pay').hidden=false;}
-  if(result.status==='captured'){$('pay').hidden=true;$('payment-state').textContent='Mock capture verified. No real payment.';}
+  if(result.status==='buyer_approval_required'){order=result.order;$('pay').hidden=false;if(order.approval?.mode==='sandbox')$('pay').textContent='Open PayPal sandbox for human review';}
+  if(result.status==='captured'){$('pay').hidden=true;$('capture').hidden=true;$('payment-state').textContent=order?.approval?.mode==='sandbox'?'Sandbox capture verified. No real funds.':'Mock capture verified. No real payment.';}
   if(result.error)say(result.error.message||'Checkout stopped.');
 }
 async function poll(){
@@ -33,7 +33,12 @@ for(const [id,proceed] of [['confirm-yes',true],['confirm-no',false]])$(id).addE
   try{await api('/api/confirm',{proceed,merchant_id:$('merchant-choice').value});$('confirmation').hidden=true;poll();}catch(error){say('Confirmation did not complete.');}
 });
 $('pay').addEventListener('click',async()=>{
-  if(!order)return;$('pay').disabled=true;
+  if(!order)return;
+  if(order.approval?.mode==='sandbox'){
+    try{const step=await api('/api/payment-step');const url=new URL(step.approval_url);if(url.origin!=='https://www.sandbox.paypal.com')throw new Error('sandbox_required');window.open(url.href,'_blank','noopener,noreferrer');$('capture').hidden=false;}catch(error){say('Sandbox approval step stopped.');}
+    return;
+  }
+  $('pay').disabled=true;
   try{const sdk=await window.paypal.createInstance({clientId:'MOCK_CLIENT',components:['paypal-payments']});
     const methods=await sdk.findEligibleMethods({currencyCode:'USD'});if(!methods.isEligible('paypal'))throw new Error('unavailable');
     const session=sdk.createPayPalOneTimePaymentSession({onApprove:async data=>{
@@ -42,4 +47,11 @@ $('pay').addEventListener('click',async()=>{
     await session.start({presentationMode:'auto'},Promise.resolve({orderId:order.order_id}));
   }catch(error){say('Payment step stopped. Do not retry automatically.');}
 });
-(async()=>{const config=await api('/api/session');csrf=config.csrf;$('purchase').querySelector('button').disabled=false;})().catch(()=>say('Session could not start.'));
+(async()=>{const config=await api('/api/session');csrf=config.csrf;if(config.mode==='sandbox'){for(const option of [...$('store').options])if(option.value!=='corner-bakery')option.remove();}
+$('purchase').querySelector('button').disabled=false;})().catch(()=>say('Session could not start.'));
+
+$('capture').addEventListener('click',async()=>{
+  $('capture').disabled=true;
+  try{show(await api('/api/capture',{order_id:order.order_id}));}
+  catch(error){say('Capture stopped. PayPal approval is required; do not retry automatically.');}
+});

@@ -111,7 +111,14 @@ def build_server(ghost, paypal=None):
 def main():
     from .demo_data import records
     from .api import RecordedGhost
-    build_server(RecordedGhost(records())).run(transport='stdio')
+    from .config import runtime_config
+    config=runtime_config()
+    if config is None: server=build_server(RecordedGhost(records()))
+    else:
+        from .fixture import LocalSandboxGhost
+        from .sandbox import SandboxPayPal
+        server=build_server(LocalSandboxGhost(config),SandboxPayPal(config))
+    server.run(transport='stdio')
 
 
 if __name__ == '__main__':

@@ -71,7 +71,7 @@ async def test_no_elicitation_no_order_and_stateless_check_fallback():
 async def test_installed_stdio_entrypoint_uses_mocks_only():
     import sys
     from mcp import StdioServerParameters
-    params=StdioServerParameters(command=sys.executable,args=['-m','ghost_checkout.server'])
+    params=StdioServerParameters(command=sys.executable,args=['-m','ghost_checkout.server'],env={'GHOST_CHECKOUT_MODE':'offline'})
     async with Client(params,mode='legacy') as client:
         output=await checked(client,BASE+'corner-bakery.html')
         assert output['status']=='checked' and output['observed_merchant']==['DEMO_BAKERY_MERCHANT']

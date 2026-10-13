@@ -86,7 +86,7 @@ class Checkout:
         self.orders[order_id]=BoundOrder(owner,merchant,amount,currency)
         self.attempts[attempt]=order_id
         return {'status':'buyer_approval_required','order_id':order_id,'observed_merchant':[merchant],
-                'approval':{'mode':'mock','action':'human_paypal_ui'},'verdict':checked.verdict,'not_a_guarantee':True}
+                'approval':{'mode':getattr(self.paypal,'mode','mock'),'action':'human_paypal_ui'},'verdict':checked.verdict,'not_a_guarantee':True}
 
     def bound(self, owner, order_id):
         self.purge();order=self.orders.get(order_id)
@@ -96,7 +96,9 @@ class Checkout:
     def matches(self, raw, bound):
         try:
             units=raw['purchase_units']
-            return len(units)==1 and units[0]['payee']['merchant_id']==bound.merchant and units[0]['amount']=={'currency_code':bound.currency,'value':bound.amount}
+            return (len(units)==1 and units[0]['payee']['merchant_id']==bound.merchant
+                    and units[0]['amount'].get('currency_code')==bound.currency
+                    and units[0]['amount'].get('value')==bound.amount)
         except (KeyError, TypeError): return False
 
     def capture_ids(self, raw):

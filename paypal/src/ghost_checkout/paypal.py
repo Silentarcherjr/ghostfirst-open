@@ -16,15 +16,23 @@ def order_body(merchant, item, amount, currency):
 
 
 class ServerSDKPayPal:
-    """No credential constructor. Controllers are supplied by tests; E6 wires auth."""
+    """Injected controllers; SandboxPayPal wires pinned SDK OAuth for E6."""
     def __init__(self, orders, payments):
         self.orders, self.payments = orders, payments
+        self.lock=asyncio.Lock();self.uncertain=False
 
     async def _call(self, method, options):
-        result=await asyncio.to_thread(method, options)
-        if not 200 <= result.status_code < 300: raise ClosedError('paypal_failed')
-        body=result.body
-        return json.loads(APIHelper.json_serialize(body))
+        async with self.lock:
+            if self.uncertain: raise ClosedError('paypal_uncertain_manual_review')
+            try:
+                result=await asyncio.to_thread(method,options)
+                if not 200 <= result.status_code < 300: raise ClosedError('paypal_failed')
+                return json.loads(APIHelper.json_serialize(result.body))
+            except asyncio.CancelledError:
+                self.uncertain=True
+                raise
+            except Exception:
+                raise ClosedError('paypal_failed') from None
 
     async def create(self, body, request_id):
         return await self._call(self.orders.create_order,{'body':OrderRequest.from_dictionary(body),'paypal_request_id':request_id})

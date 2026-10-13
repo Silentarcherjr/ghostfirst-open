@@ -24,8 +24,16 @@ UI=Path(__file__).parent/'ui'
 CSP="default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; frame-src 'none'; frame-ancestors 'none'; form-action 'none'; base-uri 'none'; object-src 'none'"
 
 
-def create_app():
-    paypal=MockPayPal();server=build_server(RecordedGhost(records()),paypal);sessions={}
+def create_app(config=None):
+    model=None
+    if config is None:
+        paypal=MockPayPal();ghost=RecordedGhost(records())
+    else:
+        from .sandbox import SandboxPayPal
+        from .openrouter import OpenRouterChat
+        from .fixture import LocalSandboxGhost
+        paypal=SandboxPayPal(config);ghost=LocalSandboxGhost(config);model=OpenRouterChat(config)
+    server=build_server(ghost,paypal);sessions={}
     tasks=set()
     def track(task): tasks.add(task);task.add_done_callback(tasks.discard)
 
@@ -63,9 +71,9 @@ def create_app():
         old=request.cookies.get('ghost_checkout')
         if old in sessions:
             previous=sessions.pop(old);await previous['worker'].close()
-        token=token_urlsafe(32);csrf=token_urlsafe(32);worker=DemoSession(server,paypal);worker.start()
+        token=token_urlsafe(32);csrf=token_urlsafe(32);worker=DemoSession(server,paypal,model);worker.start()
         sessions[token]={'csrf':csrf,'worker':worker,'born':time.monotonic(),'result':None,'running':False}
-        response=JSONResponse({'csrf':csrf,'mode':'offline-mock'})
+        response=JSONResponse({'csrf':csrf,'mode':'sandbox' if config else 'offline-mock'})
         response.set_cookie('ghost_checkout',token,httponly=True,samesite='strict',max_age=900)
         return response
 
@@ -103,10 +111,25 @@ def create_app():
         owner['result']=result
         return JSONResponse(result)
 
+    async def payment_step(request):
+        owner=session(request);order_id=owner['worker'].agent.order_id
+        if config is None or not order_id: raise ClosedError('unknown_order')
+        return JSONResponse({'approval_url':paypal.buyer_approval_url(order_id)})
+
+    async def capture(request):
+        owner,body=await data(request)
+        if config is None or set(body)!={'order_id'}: raise ClosedError('invalid_request')
+        result=await owner['worker'].submit('capture',body['order_id'])
+        owner['result']=result
+        return JSONResponse(result)
+
     async def static(request):
         name=request.path_params.get('name') or 'index.html'
         if name not in {'index.html','styles.css','app.js','paypal-v6-mock.js'}: return Response(status_code=404)
-        return Response(UI.joinpath(name).read_bytes(),media_type={'.html':'text/html','.css':'text/css','.js':'text/javascript'}[Path(name).suffix])
+        body=UI.joinpath(name).read_bytes()
+        if config and name=='index.html':
+            body=body.replace(b'Offline Demo',b'Sandbox Demo').replace(b'NO MONEY MOVES',b'SANDBOX FUNDS ONLY').replace(b'OFFLINE',b'SANDBOX').replace(b'Offline mock model, mock PayPal, recorded synthetic GhostFirst checks. No real provider connection.',b'OpenRouter model, PayPal sandbox, local fixture observation. Buyer approval stays in PayPal.')
+        return Response(body,media_type={'.html':'text/html','.css':'text/css','.js':'text/javascript'}[Path(name).suffix])
 
     async def shop(request):
         name=request.path_params['name']
@@ -118,11 +141,14 @@ def create_app():
         payload=json.loads(request.content)
         success=payload.get('transmission_sig')=='MOCK-VALID-SIGNATURE'
         return httpx.Response(200,json={'verification_status':'SUCCESS' if success else 'FAILURE'})
-    hooks=Webhooks('MOCK-WEBHOOK-ID',httpx.MockTransport(verify))
+    if config:
+        from .webhooks import SandboxWebhooks
+        hooks=SandboxWebhooks(config,paypal)
+    else: hooks=Webhooks('MOCK-WEBHOOK-ID',httpx.MockTransport(verify))
     app=Starlette(lifespan=lifespan,routes=[Route('/',static),Route('/api/session',start_session),
          Route('/api/state',state),Route('/api/chat',purchase,methods=['POST']),
          Route('/api/confirm',confirm,methods=['POST']),Route('/api/mock-approve',approve,methods=['POST']),
-         *webhook_app(hooks).routes,Route('/shop/{name}',shop),Route('/{name}',static)])
+         *webhook_app(hooks).routes,Route('/api/payment-step',payment_step),Route('/api/capture',capture,methods=['POST']),Route('/shop/{name}',shop),Route('/{name}',static)])
     app.add_middleware(TrustedHostMiddleware,allowed_hosts=['127.0.0.1','localhost','[::1]','*.app.github.dev'])
     async def boundary(request,call_next):
         try: response=await call_next(request)
@@ -135,3 +161,8 @@ def create_app():
 
 
 app=create_app()
+
+
+def create_sandbox_app():
+    from .config import runtime_config
+    return create_app(runtime_config('sandbox'))

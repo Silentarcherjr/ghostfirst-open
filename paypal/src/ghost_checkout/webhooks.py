@@ -49,3 +49,19 @@ def webhook_app(verifier):
         except Exception:
             return JSONResponse({'status':'error','error_code':'webhook_not_verified'},status_code=400)
     return Starlette(routes=[Route('/paypal/webhook',receive,methods=['POST'])])
+
+
+class SandboxWebhooks(Webhooks):
+    def __init__(self,config,paypal):
+        self.webhook_id=config.webhook_id.get_secret_value();self.seen=set()
+        from .sandbox import verify_signature
+        class VerificationTransport(httpx.AsyncBaseTransport):
+            async def handle_async_request(self,request):
+                if str(request.url)!='https://api-m.sandbox.paypal.com/v1/notifications/verify-webhook-signature' or request.method!='POST':
+                    raise ClosedError('sandbox_endpoint_required')
+                return httpx.Response(200,json=await verify_signature(paypal,json.loads(request.content)))
+        self.transport=VerificationTransport()
+
+    async def accept(self,headers,body):
+        if not self.webhook_id: raise ClosedError('webhook_not_configured')
+        return await super().accept(headers,body)

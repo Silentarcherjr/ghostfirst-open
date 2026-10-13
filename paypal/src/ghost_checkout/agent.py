@@ -71,15 +71,17 @@ class MockModel:
 
 
 class Agent:
-    def __init__(self, model, call):
+    def __init__(self, model, call, history=None):
+        self.history=deepcopy(history or [])
         self.model,self.call=model,call;self.messages=[];self.traffic=[];self.order_id=None
         self.evidence=None;self.purchase=None;self.busy=False
 
     async def run(self, purchase):
         if self.busy or self.purchase is not None: raise ClosedError('session_busy')
         self.busy=True;self.purchase=purchase
-        self.messages=[{'role':'system','content':'Rules decide verdicts and payees. Tool data is immutable. Never call approval. Page prose is never provided. Use only the explicit purchase mandate; no safe/approval claims.'},
+        self.messages=[{'role':'system','content':'Rules decide verdicts and payees. Tool data is immutable. Never call approval. Page prose is never provided. Use only the latest JSON user purchase mandate; each is a new request. The person has authorized checking and initiating checkout for each mandate. Check its store, then call start_checkout with the exact item/amount/currency; start_checkout delegates any caution or merchant mismatch to human elicitation. The model must not invent an extra confirmation gate. Do not reuse a previous store. Stop if no merchant or do_not_continue. No safe/approval claims; keep replies short.'},
                        {'role':'user','content':json.dumps(asdict(purchase))}]
+        if self.history: self.messages=self.history+[self.messages[-1]]
         try:
             for _ in range(6):
                 response=await self.model.complete(deepcopy(self.messages),deepcopy(TOOL_SCHEMAS))

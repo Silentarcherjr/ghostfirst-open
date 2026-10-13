@@ -7,8 +7,9 @@ from .evidence import ClosedError
 
 
 class DemoSession:
-    def __init__(self,server,paypal):
+    def __init__(self,server,paypal,model=None):
         self.server,self.paypal=server,paypal
+        self.model=model or MockModel()
         self.queue=asyncio.Queue(maxsize=8);self.pending=None;self.task=None;self.agent=None
 
     async def ask(self,ctx,params):
@@ -32,7 +33,7 @@ class DemoSession:
                     await asyncio.sleep(.02)
                     result=(await client.call_tool('get_check_result',{'job_id':result['job_id']})).structured_content
                 raise ClosedError('check_timeout')
-            self.agent=Agent(MockModel(),call)
+            self.agent=Agent(self.model,call)
             while True:
                 action,payload,future=await self.queue.get()
                 if action=='close': future.set_result(None);break
@@ -41,7 +42,12 @@ class DemoSession:
                     elif action=='approve':
                         if payload!=self.agent.order_id: raise ClosedError('unknown_order')
                         # This path is reachable only through a human UI POST, never tools/model.
+                        from .paypal import MockPayPal
+                        if not isinstance(self.paypal,MockPayPal): raise ClosedError('mock_approval_unavailable')
                         await self.paypal.approve(payload)
+                        result=await self.agent.complete_after_human()
+                    elif action=='capture':
+                        if payload!=self.agent.order_id: raise ClosedError('unknown_order')
                         result=await self.agent.complete_after_human()
                     else: raise ClosedError('invalid_action')
                     if not future.done(): future.set_result(result)

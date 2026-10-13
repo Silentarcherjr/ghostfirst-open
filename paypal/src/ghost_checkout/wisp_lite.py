@@ -47,14 +47,14 @@ async def isolated(page):
     finally: await cdp.detach()
 
 
-async def observe_fixtures(base):
+async def observe_fixtures(base,stores=STORES):
     results=[]
     async with async_playwright() as pw:
         options={'headless':True,'args':['--disable-background-networking']}
         if os.environ.get('GHOST_CHECKOUT_CHROMIUM'): options['executable_path']=os.environ['GHOST_CHECKOUT_CHROMIUM']
         browser=await pw.chromium.launch(**options)
         try:
-            for name in STORES:
+            for name in stores:
                 context=await browser.new_context(viewport={'width':390,'height':844},accept_downloads=False,permissions=[],service_workers='block')
                 page=await context.new_page();provider=None
                 async def guard(route,request):
