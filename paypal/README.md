@@ -18,3 +18,13 @@ verified webhooks are advisory and never approve/capture by themselves.
 
 Local tests (no credentials): `uv run --extra test pytest -q`.
 The complete offline agent/UI runner and judge setup are E4–E5.
+
+E4 adds the offline phone chat (`src/ghost_checkout/ui`), fixed evidence card,
+human merchant confirmation, mock v6 payment session and a real MCP trace.
+The model protocol follows the [official OpenAI tool-calling message format](https://developers.openai.com/api/docs/guides/function-calling).
+Only mock transport is accepted; Bedrock Converse is explicitly a stub.
+
+Local UI: `uv run uvicorn ghost_checkout.web:app --host 127.0.0.1 --port 8876`.
+No credentials, PayPal/LLM requests or hosted GhostFirst visits occur. CSP is
+self-only; renderer uses textContent, targets are 48 px and text contrast ≥4.5:1.
+A server-issued HttpOnly/SameSite session and Origin/CSRF checks protect actions.

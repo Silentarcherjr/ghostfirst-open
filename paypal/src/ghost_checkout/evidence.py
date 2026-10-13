@@ -7,6 +7,7 @@ from .sensitive import one_time_link_indicators
 ID = re.compile(r'[A-Za-z0-9_-]{1,128}\Z')
 STATES = {'no_obvious_danger', 'caution', 'do_not_continue'}
 TEXTS = {
+    'checkout.merchant_claim_mismatch': 'The claimed merchant differs from the observed PayPal merchant.',
     'page.paypal_checkout_seen': 'A PayPal checkout SDK request was observed.',
     'page.offsite_card_form': 'Card details were requested without an observed PayPal SDK.',
     'page.credentials_after_visual_change': 'The page changed into a credential form.',
@@ -45,9 +46,12 @@ class Check:
     rules: tuple[str, ...]
 
     def output(self):
+        reasons=list(self.reasons)
+        if self.claimed and self.claimed not in self.merchants:
+            reasons.append('checkout.merchant_claim_mismatch')
         return {'status':'checked','verdict':self.verdict,
                 'observed_merchant':list(self.merchants) or None,
-                'reasons':[{'code':code,'text':TEXTS[code]} for code in self.reasons],
+                'reasons':[{'code':code,'text':TEXTS[code]} for code in reasons],
                 'rules':list(self.rules), 'not_a_guarantee':True}
 
 

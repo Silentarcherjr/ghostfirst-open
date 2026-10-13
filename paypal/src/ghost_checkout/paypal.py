@@ -49,7 +49,9 @@ class MockPayPal:
         if self.fail == action: raise ClosedError('paypal_failed')
 
     async def create(self, body, request_id):
-        self._guard('create'); order_id='MOCK-'+token_urlsafe(18)
+        self._guard('create')
+        if len(self.orders)>=128: raise ClosedError('server_busy')
+        order_id='MOCK-'+token_urlsafe(18)
         order=deepcopy(body);order.update(id=order_id,status='CREATED')
         self.orders[order_id]=order
         return deepcopy(order)
