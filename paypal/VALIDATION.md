@@ -1,44 +1,56 @@
 # Local validation — 2026-10-13
 
-Everything below uses mock PayPal/LLM and local or recorded synthetic inputs.
-No real credential/provider/hosted API session, deployment or publication.
+## Offline suite
 
-- Public Python 3.12 project: **55 passed** with opt-in Chromium browser tests.
-  Includes actual MCP 2.2.0 sessions, async checks, stateless fallback, human
-  elicitation, stdio entrypoint, owner isolation, cache expiry, fixed output,
-  APIMatic model serialization and operation mapping, mismatch refunds, failures,
-  uncertain/malformed capture, purchase/output guard, Origin/CSRF and UI contrast.
-- Four 390 px Chromium flows: Flash Sale accept and decline, Corner Bakery mock
-  capture and Riverside refusal with no order. No external page requests,
-  page injection text in tool output, horizontal overflow or JS errors.
-- Browserless standalone copy, frozen offline install: **50 passed, 5 skipped**.
-  Four browser tests require explicit opt-in; the private checkout/store drift
-  test is skipped in the independent export. No monorepo import is needed.
-- Public Wisp-lite: three actual local fixture visits. Corner merchant matches
-  recorded contract; Flash merchant differs from its bounded claim; Riverside
-  has no SDK and its card form appears late. SDK URL fulfilled before network,
-  other external requests blocked, isolated-world reads, no submit/click/typing.
-  This is observation evidence, **not** the full private verdict/OpenCV engine.
-- `uv build --offline`: wheel + sdist successful. Wheel contains the independent
-  runtime, UI, stores and Apache license. No publish command was run.
-- UI text color pairs ≥4.5:1; 48 px controls/ARIA log/self-only CSP/no innerHTML.
-  No physical-user accessibility study or genuine PayPal approval UI test yet.
+- Public Python 3.12 project: **69 passed**, including four opt-in Chromium
+  390 px flows, in 8.05 s. Flash accept/decline, Corner mock capture and Riverside
+  refusal; no external page requests, injected prose output, overflow or JS errors.
+- Actual MCP sessions/elicitation/stdio, ownership and expiry; SDK models and
+  mocked HTTP OAuth/create/get/capture/refund mapping; optional amount breakdown;
+  payee/amount binding, refunds, uncertainty, guards, CSRF and UI contrast.
+- External-secret parsing uses fake test values. Autouse guards force offline
+  mode and block real requests/HTTPX transport. The real recorded OpenRouter
+  cassette replays through MockTransport, without contacting a provider.
+- Sandbox UI cannot use mock approval; capture before APPROVED refuses without
+  calling capture. Empty webhook ID refuses before verification/network.
+- Backend **377 passed** (175.73 s; existing LibreSSL/escape warnings); Flutter
+  **224 passed**, analysis clean; original MCP **42 passed**; web contract
+  **6 passed**. UI JavaScript syntax and Git whitespace checks passed.
+- Previous E5 standalone install: 50 passed, 5 skipped. That historical result
+  does not establish standalone coverage of the new E6 adapter.
 
-Repeat the complete public suite after Chromium installation:
+Repeat from this directory after optional Chromium installation:
 
 ```sh
 GHOST_CHECKOUT_BROWSER_TESTS=1 uv run --offline --extra test pytest -q
 ```
 
-Use `GHOST_CHECKOUT_CHROMIUM=/absolute/path/to/Chromium` for an already installed
-browser; otherwise `uv run playwright install chromium` is a one-time setup.
-The chat demo itself needs no browser binary and no network after dependency setup.
+Use `GHOST_CHECKOUT_CHROMIUM=/absolute/path/to/Chromium` for an installed browser.
+Without browser opt-in, four browser tests skip. The offline chat needs neither
+Chromium nor keys. No physical accessibility study or genuine v6 approval test.
 
-Private checkout integration (outside this independent package): backend/Flutter/
-web/MCP validation and real Wisp evidence are recorded in the monorepo HANDOFF.
-Codespaces JSON is prepared and validated, but no cloud instance was created.
-All temporary screenshots/copies were removed after verification.
+## Authorized external evidence
 
-E6 remains pending: genuine sandbox SDK/OAuth, real v6 merchant observation,
-merchant authorization, live webhook verification, hosted engine and LLM provider.
-Do not present mocks as a completed payment or AI/provider session.
+- One **1.00 USD sandbox** order created through the pinned APIMatic SDK with an
+  explicit merchant observed on the local Corner fixture. OAuth token RAM only.
+  Approval link printed only for the owner, no buyer login/approval automation.
+- Real GET matched merchant/currency/value. A deliberately different expected
+  merchant was rejected with **no capture**. SDK optional amount breakdown is
+  tolerated without relaxing these immutable comparisons.
+- Capture/refund were **not executed live**. The owner manually approves and
+  resumes the smoke CLI as documented in README; refund uses a fresh order.
+- One real OpenRouter conversation: six calls, reported USD **0.0010817**.
+  Three store checks; every episode stopped without start_checkout/order.
+  The model was conservative. Initiation wording was clarified afterwards, not
+  rerun live. Page injection text was never sent to the model by construction.
+- Public cassette contains sanitized requests/responses and synthetic store IDs;
+  the monorepo trace is in research/ghost_checkout_trace. Replay tests validate
+  recorded transport/guards, not the behavior of the revised prompt.
+- Webhook ID remains empty; no real webhook/signature verification performed.
+  Hosted GhostFirst mode disabled; fixture Wisp-lite is not the private engine.
+
+No deployment, push, publication or cloud resource creation. Codespaces remains
+prepared configuration only. Credentials, real order IDs and approval links are
+excluded from committed evidence. Local `uv build --offline` produced wheel/sdist; runtime UI/store resources and
+smoke/trace scripts plus cassette inclusion were checked. Packaging tests: 4 passed.
+No artifact is published.

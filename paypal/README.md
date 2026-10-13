@@ -2,10 +2,11 @@
 
 **Every agent can reach checkout. Ours cannot be talked into choosing a payee.**
 
-E1–E5, built with mocks on 2026-10-13. Python 3.12 · Apache-2.0 · MCP 2.2.0.
-No money moves, no credential is required and no provider is contacted.
-Real sandbox/LLM wiring is **E6**, after Claude review and owner authorization.
-There is no claim of a live payment, live AI session, or hackathon eligibility.
+Built on 2026-10-13. Python 3.12 · Apache-2.0 · MCP 2.2.0.
+**Offline is the default:** no credential or provider request. E6 adds an explicit
+sandbox-only PayPal adapter and bounded OpenRouter tool calling. One real sandbox
+order was created and read; buyer approval, capture and refund remain owner steps.
+One real OpenRouter conversation is recorded with its limitations below.
 
 ## Run the offline demo
 
@@ -20,7 +21,7 @@ Open **http://127.0.0.1:8876**. After dependency setup, the demo runs completely
 offline: deterministic mock model, mock PayPal, recorded **synthetic** GhostFirst
 API responses, local JS SDK v6-shaped mock. No API key, .env file, DNS request
 to a demo store, or Chromium is needed for the chat demo. The SDK models come
-from the real APIMatic package; controller/HTTP calls remain mocked.
+from the real APIMatic package; controller/HTTP calls in this default mode remain mocked.
 
 Codespaces: open this folder using `.devcontainer`, then:
 
@@ -60,19 +61,20 @@ Mismatch refunds and provider/API failures are tested, not claimed as live demos
 
 ## PayPal API and SDK inventory
 
-| API / SDK | Role | E1–E5 status |
+| API / SDK | Role | Current evidence |
 |---|---|---|
-| PayPal Python Server SDK 2.0.0 (APIMatic) | `OrderRequest` model; injected Orders/Payments controllers | Real model serialization tested; controller calls mocked |
-| Orders v2 `POST /v2/checkout/orders` | Explicit observed `purchase_units[].payee.merchant_id`; CAPTURE intent | Mock create, no live OAuth/controller |
-| Orders v2 `GET /v2/checkout/orders/{id}` | Read status; pre/post-capture payee and amount checks | Mock GET; fixed status output only |
-| Orders v2 `POST /v2/checkout/orders/{id}/capture` | After buyer approval only | Mock capture; uncertain outcome stops without retry |
-| Payments v2 `POST /v2/payments/captures/{id}/refund` | Refund known captures when verification fails | Mock refund, tested mismatch and refund failure |
-| `POST /v1/notifications/verify-webhook-signature` | Verify before accepting APPROVED / CAPTURE.COMPLETED notifications | Mock REST transport, replay-bound; events never capture/approve |
-| JS SDK v6 `createInstance`, eligibility, one-time payment session `start`/`onApprove` | Human approval UI | Local v6-shaped mock, no PayPal script/network |
-| Classic JS SDK `/sdk/js?client-id=…&merchant-id=…` | Request-only merchant observation | Fake SDK URL fulfilled locally in scanner/Wisp-lite tests |
-| MCP SDK 2.2.0 | Async session-owned checks, stateless check fallback, human elicitation, order tools | Actual pinned SDK, in-memory and stdio |
-| PayPal Agent Toolkit / sandbox MCP / transaction search | Optional read-only additions | **Not used**; no sponsor/API claim for these |
-| OpenAI-compatible chat/tool protocol | Provider-neutral orchestration interface | Mock transport only; Bedrock Converse is a stub |
+| PayPal Python Server SDK 2.0.0 (APIMatic) | Orders/Payments models and controllers; RAM-only OAuth cache | Actual sandbox OAuth, create and GET; full mapping tested with mocked HTTP |
+| Orders v2 `POST /v2/checkout/orders` | Explicit observed `payee.merchant_id`, CAPTURE intent | One real 1.00 USD sandbox order created; approval pending human |
+| Orders v2 `GET /v2/checkout/orders/{id}` | Status, pre/post-capture payee and amount | Real read and deliberate expected-merchant mismatch refusal, no capture |
+| Orders v2 `POST /v2/checkout/orders/{id}/capture` | APPROVED/payee/amount precheck, human step | Wired; tested offline, not executed against sandbox |
+| Payments v2 `POST /v2/payments/captures/{id}/refund` | Known-capture mismatch compensation / owner smoke | Wired; tested offline, not executed against sandbox |
+| `POST /v1/notifications/verify-webhook-signature` | Verify before advisory event handling | Sandbox OAuth helper wired; empty webhook ID refuses before network; mock tests only |
+| JS SDK v6 payment session | Human approval in offline demo | Local v6-shaped mock; genuine v6 integration unresolved |
+| Classic JS SDK `/sdk/js` | Request-only merchant observation | Local fixture request intercepted and fulfilled locally; sandbox fixture renders runtime IDs in RAM |
+| Sandbox approval redirect | Owner browser only, never a model tool result | Validated sandbox link obtained; no automated login or approval |
+| MCP SDK 2.2.0 | Owned checks, elicitation and order tools | Actual pinned SDK, in-memory and stdio |
+| OpenRouter tool calling, Claude Haiku 5.5 | Guarded orchestration | One real conversation, six requests; recorded offline replay |
+| PayPal Agent Toolkit / transaction search / Bedrock | Optional alternatives | Not used; Bedrock remains a stub |
 
 Sources: [PayPal Server SDK](https://developer.paypal.com/serversdk/python/),
 [Orders v2](https://developer.paypal.com/docs/api/orders/v2/),
@@ -84,8 +86,9 @@ Sources: [PayPal Server SDK](https://developer.paypal.com/serversdk/python/),
 `/web-sdk/v6/core`, and that URL does not identify the merchant. Do not infer a
 merchant from client-id or fixture query parameters on v6. The demos distinguish
 mock classic observation metadata from the mock v6 approval UI. Real v6 merchant
-observation and multiparty/sandbox payee authorization must be resolved in E6;
-v6-only stores without merchant observation refuse.
+observation and genuine v6 approval remain unresolved. Sandbox E6 uses the
+classic local fixture observation and a human approval redirect; v6-only stores
+without merchant observation refuse.
 
 ## What is public, hosted, recorded and private?
 
@@ -96,7 +99,7 @@ v6-only stores without merchant observation refuse.
   `demo_data.py`, labeled synthetic. Demo URLs use reserved `.test` names;
   the recorded client never resolves/fetches them.
 - `api.py` defines the `/v1/scans` boundary used by the hosted GhostFirst API
-  (`https://ghostfirst.com`), but E1–E5 require MockTransport. Actual hosted mode
+  (`https://ghostfirst.com`), but the demo uses MockTransport. Actual hosted mode
   is disabled. The full engine, isolated Wisp, Replay/CAU-9 and reputation remain
   private/hosted; they are **not** bundled or reproduced by Wisp-lite.
 - Wisp-lite shows public request capture and card presence on the fixed local
@@ -135,7 +138,8 @@ executable path instead of installing another browser.
   this is **not real signature validation**. Events are advisory and deduplicated.
 
 State is bounded volatile RAM: cache 10 min, order/session 15 min, cleanup on
-connection close. Restart/expiry loses ownership; old orders cannot be resumed.
+connection close. Restart/expiry loses UI/MCP ownership. The separate owner-only smoke CLI can
+resume an explicitly supplied order after fresh fixture observation and GET checks.
 Stateless **payment mutations refuse** because verified session ownership is
 unavailable. The UI uses a server-issued session and a stateful MCP client.
 The model only selects tools/phrases answers. Amount/item/currency come from the
@@ -156,14 +160,72 @@ HTTP UI flow. Browser verification checks a 390 px phone viewport and blocks
 external requests. Run it with `GHOST_CHECKOUT_BROWSER_TESTS=1` after the optional
 Chromium setup (or `GHOST_CHECKOUT_CHROMIUM` for an existing binary). See `VALIDATION.md` for measured results.
 
-## Secrets and E6 handoff
+## Explicit sandbox mode and owner smoke
 
-`.env.example` contains blanks/placeholders only and is not auto-loaded. Runtime
-accepts offline mode only; it **does not read credentials**. When separately
-ready for E6, real sandbox secrets belong in `~/.config/ghostfirst/paypal.env`,
-read server-side at runtime by the future authorized adapter. Do not put secrets
-in the browser, model, Git or chat. A public JS client ID is distinct from a
-client secret; no secret is present here. See [SECURITY.md](SECURITY.md).
+Secrets stay in an owner-owned **0600**, regular, non-symlink file outside this
+repository: `~/.config/ghostfirst/paypal.env`, or `GHOST_CHECKOUT_SECRETS`.
+The reader never evaluates shell code. Required names are `PAYPAL_CLIENT_ID`,
+`PAYPAL_CLIENT_SECRET`, `SANDBOX_MERCHANT_ID`, `LLM_API_KEY`, `LLM_MODEL`;
+`LLM_BASE_URL` must be `https://openrouter.ai/api/v1` and the current model is
+`anthropic/claude-haiku-5.5`. `PAYPAL_WEBHOOK_ID` stays empty until owner setup.
+`.env.example` is blank documentation, never auto-loaded. Offline mode does not
+read the external file. Non-sandbox PayPal modes/base URLs fail closed.
 
-Stop after E5 for Claude Code review. No live sandbox/LLM run, E6 wiring, deploy,
-push, publication, cloud provisioning, video or Devpost submission is included.
+From this directory, with local Chromium installed:
+
+```sh
+GHOST_CHECKOUT_MODE=sandbox uv run python tool/sandbox_smoke.py --action create
+GHOST_CHECKOUT_MODE=sandbox uv run python tool/sandbox_smoke.py --action mismatch --order-id ORDER_ID
+```
+
+Set `GHOST_CHECKOUT_CHROMIUM` to an installed executable if needed. Creation
+observes only the locally served Corner Bakery fixture, binds the runtime merchant
+and 1.00 USD, prints only the order ID and sandbox approval link, then exits at
+the human boundary. The second command performs GET and rejects a deliberately
+wrong expected merchant; it never captures. Neither command calls OpenRouter.
+
+**Owner only:** open the printed link yourself, log in with your sandbox buyer
+and approve manually. Then resume that order:
+
+```sh
+GHOST_CHECKOUT_MODE=sandbox uv run python tool/sandbox_smoke.py --action capture --order-id ORDER_ID
+```
+
+For capture-then-refund coverage, create a **fresh second order**, approve it
+manually, then run `--action refund --order-id ORDER_ID`. Both actions require
+APPROVED and matching observed merchant/amount; an already captured order cannot
+be reused. Ambiguity prints a fixed failure and requires manual review, never an
+automatic retry. Capture/refund were not run live during E6.
+
+```sh
+GHOST_CHECKOUT_MODE=sandbox uv run ghost-checkout-demo
+```
+
+Sandbox UI binds to loopback only and offers only Corner Bakery. It uses local
+fixture observation, real OpenRouter and real sandbox Orders. The owner opens
+the approval link with a button, manually approves in PayPal, then explicitly
+requests verification/capture. The simulated approval endpoint refuses sandbox
+clients. No credential or approval link enters the model. This is a local test
+boundary, not arbitrary-store browsing or the hosted private engine.
+
+OpenRouter is capped at six calls per process, 384 completion tokens/call,
+40,000 context characters, explicit provider price ceilings and a USD 0.10
+reported-cost stop. No retry/fallback. The one authorized recorded conversation
+cost **USD 0.0010817** across six calls: all three stores stopped after checks,
+without `start_checkout` or even a mock order. Corner requested additional human
+confirmation. The initiation prompt was clarified afterwards and has **not**
+been tested again with a real provider. The trace proves transport/guard behavior,
+not complete autonomous checkout or model resistance to page injection: page
+prose never enters the model by construction. The cassette is in
+`tests/cassettes/openrouter_conversation.json`; monorepo evidence is in
+`research/ghost_checkout_trace/`. The trace runner refuses an existing output;
+do not rerun paid sessions without fresh owner authorization.
+
+For webhooks, the owner must first arrange an independently authorized public
+HTTPS endpoint, register PayPal sandbox events and add its webhook ID to the
+external secret file. Empty ID stops before verification/network. No endpoint
+was deployed or registered; no real webhook was received. Notifications remain
+advisory and never substitute for buyer approval.
+
+See [SECURITY.md](SECURITY.md) and [VALIDATION.md](VALIDATION.md). E6 is local and
+awaits Claude Code review. No deploy, push, publication or cloud provisioning.

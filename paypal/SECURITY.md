@@ -16,7 +16,23 @@ MCP stateless checks run inline, but mutations require a verified connection.
 The offline UI has server-issued sessions. Webhook verification precedes event
 handling, events are deduplicated and advisory, never automatic approvals.
 
-Everything in E1–E5 uses mock PayPal, mock LLM and recorded synthetic API data.
-There is no credential-reading/live-provider fallback. Future secrets belong in
-~/.config/ghostfirst/paypal.env and never in Git, chat, browser, or model output.
-Do not publish monorepo history; only the separately approved public export.
+Offline mode never reads credentials or contacts providers. Explicit sandbox
+mode accepts only the fixed PayPal sandbox and OpenRouter HTTPS origins, disables
+redirects/proxies and SDK logging, and retains OAuth only in RAM. Secrets are
+read from an owner-owned 0600 regular file outside the repo; errors are fixed.
+No credential is sent to Flutter or persisted in a transcript. Redacted model
+messages and sanitized provider responses are used for the recorded cassette.
+
+Buyer approval remains human-only. The approval redirect is supplied only to
+the owner's UI, never to a model tool. Sandbox refuses simulated approval.
+The owner-only smoke CLI can resume an explicitly supplied order only after
+fresh local fixture observation and GET payee/amount/status checks; normal
+UI/MCP bindings still expire and cannot be recovered after restart.
+
+OpenRouter has six-call/token/context/price/cost caps, no retries or provider
+fallback. Page prose is excluded by construction, not trusted after model review.
+The real recorded model was conservative and did not start checkout; it is not
+proof of complete autonomous payment. Capture/refund and signature verification
+are wired but not verified live; an empty webhook ID refuses before network.
+
+Never publish monorepo history; only a separately approved public export.
