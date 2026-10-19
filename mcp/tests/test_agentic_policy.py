@@ -3,7 +3,11 @@ import importlib.util
 from pathlib import Path
 import pytest
 
-spec = importlib.util.spec_from_file_location('trace_driver', Path(__file__).resolve().parents[3]/'research/agentic_trace/run_trace.py')
+DRIVER = Path(__file__).resolve().parents[3]/'research/agentic_trace/run_trace.py'
+if not DRIVER.is_file():
+    # The research driver lives only in the private monorepo, not the public subtree.
+    pytest.skip('research driver not present', allow_module_level=True)
+spec = importlib.util.spec_from_file_location('trace_driver', DRIVER)
 driver = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(driver)
 
