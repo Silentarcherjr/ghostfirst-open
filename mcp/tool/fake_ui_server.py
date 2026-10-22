@@ -15,8 +15,11 @@ FIXTURE = {'final_url':'https://xn--pple-43d.example/', 'forms':{'password':True
                       'reasons':[{'code':'page.password_requested','severity':'medium'}]}}
 def response(request):
     if request.url.path == '/v1/deep-checks':
-        return httpx.Response(200,json={'verdict':{'state':'caution'},'wisps':[],
-                         'comparison':{'classification':'expected_variation'}})
+        return httpx.Response(200,json={'verdict':{'state':'caution'},'wisps':[
+            {'profile':'android_mobile','result':{'final_url':'https://xn--pple-43d.example/','forms':{'password':True,'otp':True}}},
+            {'profile':'desktop_chrome','result':{'final_url':'https://shop.example/','forms':{'email_or_username':True}}},
+            {'profile':'alternate','result':None}],
+                         'comparison':{'classification':'meaningful_variation','differences':[{'type':'different_final_destination'}]}})
     return httpx.Response(200,json=FIXTURE)
 uvicorn.run(build_http_app(GhostFirstClient('https://fixture.example',transport=httpx.MockTransport(response))),
             host='127.0.0.1',port=int(os.environ.get('GHOSTFIRST_TEST_PORT','8799')),log_level='error')

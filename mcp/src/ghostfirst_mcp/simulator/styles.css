@@ -144,3 +144,4 @@ select:focus-visible { outline:3px solid var(--ink); outline-offset:3px; }
 .phone button { max-width:100%; overflow-wrap:anywhere; }
 #share-status { overflow-wrap:anywhere; }
 .options label { display:inline-flex; align-items:center; min-height:48px; gap:8px; }
+@media(max-width:480px){.layout{padding:8px;gap:8px}.device{padding:8px}}

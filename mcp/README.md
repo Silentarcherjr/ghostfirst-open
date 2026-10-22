@@ -51,9 +51,38 @@ uses 2025-11-25); stateless 2026-era requests fail closed. The pinned MCP
 - `no_obvious_danger` is never presented as "safe". Every result carries
   `not_a_guarantee`.
 
+## Verify it yourself (offline)
+
+From `ghostfirst-open/mcp`, with the test environment installed:
+
+```bash
+# Human No on a one-time link: asserts seen == [], zero API requests.
+.venv/bin/python -m pytest -q tests/test_server.py::test_one_time_link_declined_by_the_human_is_not_visited
+# Page titles, text, events and hostile instructions are excluded from MCP output.
+.venv/bin/python -m pytest -q tests/test_redteam.py::test_page_instructions_never_reach_tool_output
+# The MCP preserves the supplied rule verdict; page claims cannot override it.
+.venv/bin/python -m pytest -q tests/test_server.py::test_mcp_preserves_rule_verdict_despite_page_claims
+# Complete offline suite.
+.venv/bin/python -m pytest -q
+```
+
+These are mocked API tests, with no hosted scan or provider session. The MCP
+consumes the backend's rule verdict; this package does not contain or execute
+the private backend rule engine, so its tests prove preservation and filtering,
+not the correctness of those backend rules. No LLM decides the result here.
+
+The offline simulator uses `tool/fake_ui_server.py`. After Deep Check, its
+three visitor tiles and spoken comparison use only structured visitor evidence.
+Missing visitors show that the site could not be reached. Ask “why?”, “what
+should I do?” or “what did each visitor see?” (Spanish: “¿por qué?”, “¿qué
+hago?”, “¿qué vio cada visitante?”). Typed and recognised voice input use the
+same deterministic handler and the last result in RAM. Unrecognised questions
+prompt for a link. This is separate from the hosted demo below, which performs
+real scans and requires owner authorization for provider use.
+
 ## Try it (judges)
 
-**Task A is local and pending review.** The existing hosted build has not
+**Task G is local and pending review.** The existing hosted build has not
 been updated with these changes. For a provider-free rehearsal:
 
 ```bash

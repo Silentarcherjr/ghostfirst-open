@@ -18,7 +18,7 @@ def digest(text):
     return "'sha256-" + base64.b64encode(hashlib.sha256(text.encode()).digest()).decode() + "'"
 
 STYLE = (DIR / 'verdict.css').read_text()
-SCRIPT = (DIR / 'verdict.js').read_text()
+SCRIPT = (DIR / 'visitors.js').read_text() + '\n' + (DIR / 'verdict.js').read_text()
 SCRIPT_HASH = digest(SCRIPT)
 STYLE_HASH = digest(STYLE)
 CSP = f"default-src 'none'; script-src {SCRIPT_HASH}; style-src {STYLE_HASH}; base-uri 'none'; form-action 'none'; connect-src 'none'"

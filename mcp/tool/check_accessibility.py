@@ -34,7 +34,7 @@ async def main():
    assert await card.locator('#yes').evaluate('(el)=>document.activeElement===el')
    await page.fill('#say','sí')
    await page.locator('#ask button[type=submit]').click()
-   await page.locator('#talk').filter(has_text='Diferencias menores').wait_for()
+   await page.locator('#talk').filter(has_text='Diferencias notables').wait_for()
    controls=await page.locator('button:visible,select:visible,input[type=url]:visible,input[type=text]:visible').evaluate_all('(els)=>els.map(e=>({id:e.id,w:e.getBoundingClientRect().width,h:e.getBoundingClientRect().height,label:e.getAttribute("aria-label")||e.title||e.textContent||e.labels?.[0]?.textContent}))')
    assert all(v['w']>=48 and v['h']>=48 and v['label'] for v in controls),controls
    # Check contrast of actual rendered text on actual computed backgrounds.

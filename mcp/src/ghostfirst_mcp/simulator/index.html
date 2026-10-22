@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>GhostFirst Voice Check</title>
 <link rel="stylesheet" href="/styles.css">
+<script src="/visitors.js" defer></script>
 <script src="/app.js" defer></script>
 </head>
 <body>
@@ -32,14 +33,14 @@
     </div>
     <form class="ask" id="ask" autocomplete="off">
       <label class="sr" for="say">Say or type</label>
-      <input id="say" name="say" type="text" placeholder="Is this link safe? https://…" spellcheck="false">
+      <input id="say" name="say" type="text" placeholder="Check this link: https://…" spellcheck="false">
       <button type="button" id="mic" class="mic" aria-pressed="false" title="Speak">🎙</button>
-      <button type="submit" class="primary">Ask</button>
+      <button type="submit" class="primary" id="ask-button">Ask</button>
     </form>
     <div class="options">
       <label for="locale">Language / Idioma</label>
       <select id="locale"><option value="en-US">EN</option><option value="es-US">ES</option></select>
-      <label><input type="checkbox" id="speak" checked> Speak answers aloud</label>
+      <label><input type="checkbox" id="speak" checked> <span id="speak-label">Speak answers aloud</span></label>
     </div>
   </section>
   <section class="wire" aria-label="MCP traffic">

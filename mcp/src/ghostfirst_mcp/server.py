@@ -101,7 +101,7 @@ class DeepCheck(LinkCheck):
     comparison: Optional[str] = None
     comparison_detail: Optional[str] = None
     differences: list[str] = Field(default_factory=list)
-    visitors: list[VisitorProfile] = Field(default_factory=list)
+    visitors: Optional[list[VisitorProfile]] = None
     reasons: list[Reason] = Field(default_factory=list)
     error_code: Optional[str] = None
     retry_after_seconds: Optional[int] = None
@@ -116,7 +116,7 @@ class HumanConfirmation(BaseModel):
 # Display vocabulary only: copied registry names grant no trust credit.
 BRANDS = ('Banco General', 'Banistmo', 'BAC Credomatic', 'Caja de Ahorros', 'Banco Nacional de Panamá', 'Global Bank', 'Multibank', 'Credicorp Bank', 'PayPal', 'Microsoft', 'Apple', 'Google', 'Netflix', 'Amazon', 'Facebook', 'Instagram', 'WhatsApp', 'Mercado Libre', 'Mercado Pago', 'DHL', 'FedEx', 'UPS')
 RULES = {f"CAU-{i}" for i in range(10)} | {f"DNC-{i}" for i in range(1, 5)} | {"NSB-0"}
-PROFILES = {"android_mobile", "desktop_chrome", "desktop_firefox"}
+PROFILES = {"android_mobile", "desktop_chrome", "desktop_firefox", "alternate"}
 
 def _domain(value):
     if not isinstance(value, str) or not value or len(value) > 253:
@@ -347,7 +347,7 @@ def build_server(client: Optional[GhostFirstClient] = None) -> MCPServer:
                 result = await asyncio.wait_for(call(url, confirm_sensitive_link=confirmed is True), JOB_TIMEOUT)
                 shaped = shape(result, locale)
                 shaped.locale = locale
-                host = shaped.final_host or next((v.final_host for v in getattr(shaped, "visitors", []) if v.final_host), None)
+                host = shaped.final_host or next((v.final_host for v in (getattr(shaped, "visitors", None) or []) if v.final_host), None)
                 if owner is not None:
                     shaped.checked_earlier_today = owner.state["ghostfirst_inbox"].remember(host)
                 if shaped.checked_earlier_today:
@@ -456,7 +456,7 @@ def build_server(client: Optional[GhostFirstClient] = None) -> MCPServer:
 
 
 SIMULATOR_DIR = Path(__file__).parent / "simulator"
-SIMULATOR_FILES = {"index.html": "text/html", "app.js": "text/javascript", "styles.css": "text/css"}
+SIMULATOR_FILES = {"index.html": "text/html", "app.js": "text/javascript", "visitors.js": "text/javascript", "styles.css": "text/css"}
 # Same-origin only: the page talks to /mcp on its own host and loads nothing else.
 SIMULATOR_HEADERS = {
     "Content-Security-Policy": (

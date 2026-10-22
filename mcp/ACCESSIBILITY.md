@@ -41,3 +41,32 @@ Still requires owner/device review: VoiceView and a screen reader with an
 actual audio device, native Alexa integration, real Echo Show distances,
 voice recognition quality and older-adult usability. Local browser checks
 cannot establish those outcomes.
+
+## Task G offline recheck — 2026-10-21
+
+Run the same fixture and accessibility command above, then:
+
+```bash
+backend/.venv/bin/python ghostfirst-open/mcp/tool/walk_demo.py
+```
+
+(The `backend/.venv` path is the existing monorepo Playwright environment;
+standalone users can use their installed Playwright Python environment.)
+
+Task G adds a shared structured-evidence visitor renderer for the simulator's
+sandboxed card and MCP Apps resource. Desktop has three columns; narrow cards
+stack the tiles. Difference markers use a dashed coloured border plus `≠` and
+fixed text. Reached/unavailable states include icons and text. Fixed field chips
+have no actions. The frame reports intrinsic card height; transcript scrolling
+honours reduced motion. CSP hashes and `sandbox="allow-scripts"` remain intact.
+
+Fresh targeted checks: both themes, 375 px, 200% CSS zoom, no horizontal
+overflow in the page or nested card; contrast minima remain 5.45:1 / 6.22:1;
+controls ≥48 px. The EN/es-US walk covers all three tiles, punycode, missing
+visitors, majority/all-different highlighting, typed and mocked recognised
+voice follow-ups, all verdict guidance branches, no-result and unknown input,
+and zero network requests for follow-ups. Desktop columns are asserted too.
+Screenshots and `walk.json` are in `/tmp/ghostfirst-task-g/` (scratch only).
+Viewport captures are used because this Chromium build produced blank iframe
+element captures. Speech recognition/synthesis are mocked, not live audio.
+These checks remain targeted review, not axe, certification or device evidence.

@@ -32,6 +32,25 @@ window.addEventListener('message', (event) => {
     for (const reason of (out.reasons || []).slice(0, 4)) {
       const chip = document.createElement('li'); chip.textContent = reason.text; el('chips').append(chip);
     }
+    el('visitors').hidden = out.status !== 'checked' || !Array.isArray(out.visitors);
+    el('visitor-tiles').replaceChildren();
+    if (!el('visitors').hidden) {
+      el('visitors-title').textContent = spanish ? 'Tres visitantes' : 'Three visitors';
+      el('comparison').textContent = out.comparison || out.differences?.[0] || '';
+      for (const row of VisitorView.rows(out, spanish)) {
+        const tile = document.createElement('article');
+        tile.className = 'visitor';
+        tile.dataset.differs = String(row.differs);
+        const heading = document.createElement('h3'); heading.textContent = `${row.icon} ${row.label}`;
+        tile.append(heading);
+        for (const text of [row.host, row.status, row.differs ? (spanish ? '≠ Observaciones diferentes' : '≠ Observations differ') : ''].filter(Boolean)) {
+          const line = document.createElement('p'); line.textContent = text; tile.append(line);
+        }
+        const chips = document.createElement('ul'); chips.className = 'field-chips';
+        for (const field of row.fields) { const chip = document.createElement('li'); chip.textContent = field; chips.append(chip); }
+        tile.append(chips); el('visitor-tiles').append(tile);
+      }
+    }
     const question = out.human_question || (out.recommended_next_step === 'deep_check' ? (spanish ? '¿Quieres una revisión profunda?' : 'Would you like a Deep Check?') : '');
     el('question').textContent = question; el('question').hidden = !question;
     el('actions').hidden = !question;
@@ -44,3 +63,5 @@ for (const [id, text] of [['yes','Yes'],['no','No']]) {
   });
 }
 send({id:1,method:'ui/initialize',params:{protocolVersion:'2026-01-26',appInfo:{name:'ghostfirst-verdict',version:'1'},appCapabilities:{availableDisplayModes:['inline']}}});
+
+new ResizeObserver(() => send({method:'ui/notifications/size-changed',params:{height:el('card').offsetHeight + 32}})).observe(el('card'));

@@ -202,7 +202,7 @@ function bubble(who, text, details = [], verdict) {
     li.append(span);
   }
   $('talk').append(li);
-  li.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  li.scrollIntoView({ block: 'nearest', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
 }
 
 function setState(state, status) {
@@ -240,7 +240,9 @@ window.addEventListener('message', (event) => {
   const frame = $('verdict-card');
   if (event.source !== frame.contentWindow || event.data?.jsonrpc !== '2.0') return;
   const m = event.data;
-  if (m.method === 'ui/initialize') {
+  if (m.method === 'ui/notifications/size-changed' && Number.isFinite(m.params?.height)) {
+    frame.style.height = `${Math.min(10000, Math.max(200, m.params.height))}px`;
+  } else if (m.method === 'ui/initialize') {
     frame.contentWindow.postMessage({jsonrpc:'2.0',id:m.id,result:{protocolVersion:'2026-01-26',hostInfo:{name:'ghostfirst-simulator',version:'1'},hostCapabilities:{message:{}},hostContext:{displayMode:'inline',deviceClass:window.innerWidth < 600 ? 'mobile':'echo-show',theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'}}}, '*');
   } else if (m.method === 'ui/notifications/initialized') {
     cardReady = true;
@@ -252,7 +254,7 @@ window.addEventListener('message', (event) => {
   }
 });
 
-const conversation = { lastUrl: null, followUp: null, confirm: null, busy: false };
+const conversation = { lastUrl: null, lastResult: null, followUp: null, confirm: null, busy: false };
 
 function askHuman(params) {
   const props = params.requestedSchema?.properties || {};
@@ -288,6 +290,7 @@ async function run(tool, url) {
       out = await client.callTool('get_check_result', { job_id: out.job_id });
     }
     if (out.status === 'checking') throw new Error('Check timed out');
+    conversation.lastResult = out;
     const answer = tool === 'deep_check' ? deepAnswer(out) : linkAnswer(out);
     conversation.followUp = answer.followUp ? 'deep_check' : null;
     if (out.history_note) answer.details.unshift(out.history_note);
@@ -306,6 +309,27 @@ async function run(tool, url) {
   }
 }
 
+function answerFollowUp(text) {
+  const question = text.toLowerCase().replace(/[¿?¡!.,]/g, '').trim();
+  if (/https?:\/\//.test(question)) return false;
+  const kind = /^(why|por qu[eé])(?=\s|$)/.test(question) ? 'why'
+    : /^(what (should|do) i do|what now|qu[eé] (hago|debo hacer|deber[ií]a hacer))(?=\s|$)/.test(question) ? 'guidance'
+    : /^(what did (each|the) visitors? see|qu[eé] vio cada visitante|qu[eé] vieron los visitantes)(?=\s|$)/.test(question) ? 'visitors' : null;
+  if (!kind) return false;
+  const out = conversation.lastResult;
+  let answer;
+  if (!out) answer = tr('Nothing has been checked yet.', 'Todavía no se ha revisado ningún enlace.');
+  else if (out.status !== 'checked') answer = out.agent_guidance;
+  else if (kind === 'why') answer = [...out.reasons.map(r => r.text), ...(out.differences || [])].join(' ') || tr('No further reasons were reported.', 'No se informaron más motivos.');
+  else if (kind === 'visitors') answer = Array.isArray(out.visitors) ? VisitorView.spoken(out, locale === 'es-US') : tr('There is no three-visitor comparison for this result.', 'Este resultado no tiene una comparación de tres visitantes.');
+  else answer = out.verdict === 'no_obvious_danger'
+    ? tr('No obvious danger was observed. This is still no guarantee.', 'No se observó peligro evidente. Esto todavía no es una garantía.')
+    : tr("Don't enter information. Check with the person through another channel.", 'No ingreses información. Consulta con la persona por otro medio.');
+  bubble('assistant', answer);
+  say(answer);
+  return true;
+}
+
 async function hear(text) {
   text = text.trim();
   if (!text) return;
@@ -316,6 +340,7 @@ async function hear(text) {
     return;
   }
   if (conversation.busy) return;
+  if (answerFollowUp(text)) return;
   if (/compartido|compartida|nieto|shared|text message|grandson/i.test(text)) {
     conversation.lastUrl = conversation.sharedUrl;
     await run('check_shared_link');
@@ -371,7 +396,9 @@ function applyLocale() {
   $('yes').textContent = tr('Yes','Sí');
   $('share').textContent = tr('Share to GhostFirst','Compartir con GhostFirst');
   $('check-shared').textContent = tr('Check shared link','Revisar enlace compartido');
-  $('say').placeholder = tr('Is this link safe? https://…','¿Puedes revisar este enlace? https://…');
+  $('say').placeholder = tr('Check this link: https://…','¿Puedes revisar este enlace? https://…');
+  $('ask-button').textContent = tr('Ask','Preguntar');
+  $('speak-label').textContent = tr('Speak answers aloud','Leer las respuestas en voz alta');
   $('mic').title = tr('Speak','Hablar');
   $('mic').setAttribute('aria-label', tr('Speak','Hablar'));
 }
