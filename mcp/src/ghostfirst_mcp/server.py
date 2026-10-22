@@ -462,7 +462,7 @@ def build_server(client: Optional[GhostFirstClient] = None) -> MCPServer:
 
 
 SIMULATOR_DIR = Path(__file__).parent / "simulator"
-SIMULATOR_FILES = {"index.html": "text/html", "app.js": "text/javascript", "visitors.js": "text/javascript", "styles.css": "text/css"}
+SIMULATOR_FILES = {"index.html": "text/html", "favicon.svg": "image/svg+xml", "app.js": "text/javascript", "visitors.js": "text/javascript", "styles.css": "text/css"}
 # Same-origin only: the page talks to /mcp on its own host and loads nothing else.
 SIMULATOR_HEADERS = {
     "Content-Security-Policy": (

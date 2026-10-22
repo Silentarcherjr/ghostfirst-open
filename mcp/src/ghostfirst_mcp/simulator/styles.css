@@ -43,7 +43,8 @@ body {
   padding: 14px 16px;
   border-bottom: 1px solid var(--line);
 }
-.brand { font-weight: 700; }
+.brand { font-weight: 700; display: inline-flex; align-items: center; gap: 8px; align-self: center; }
+.brand img { flex: none; border-radius: 6px; }
 .note { color: var(--muted); font-size: 14px; }
 .layout {
   display: grid;

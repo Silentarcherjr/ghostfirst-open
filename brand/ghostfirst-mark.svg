@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-label="GhostFirst">
+<rect width="160" height="160" rx="32" fill="#070d09"/>
+<circle cx="22" cy="106" r="3" fill="#c9ff69" opacity=".3"/>
+<circle cx="36" cy="102" r="3.5" fill="#c9ff69" opacity=".5"/>
+<circle cx="52" cy="98" r="4" fill="#c9ff69" opacity=".75"/>
+<path fill="#c9ff69" d="M72 128 V62 a28 28 0 0 1 56 0 V128 l-9.33 -6 l-9.33 6 l-9.33 -6 l-9.33 6 l-9.33 -6 z"/>
+<rect x="90" y="57" width="34" height="10" rx="5" fill="#070d09"/>
+</svg>

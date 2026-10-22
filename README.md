@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="brand/ghostfirst-lockup-dark.png">
+    <img src="brand/ghostfirst-lockup-light.png" alt="GhostFirst" width="360">
+  </picture>
+</p>
+
 # ghostfirst-open
 
 The open-source hackathon layer of [GhostFirst](https://ghostfirst.com):
@@ -26,4 +33,4 @@ caregiver service or real Echo bridge is connected.
 
 Issues and pull requests are welcome.
 
-License: [Apache-2.0](LICENSE).
+License: [Apache-2.0](LICENSE). The license covers the code; the GhostFirst name and logo (`brand/`) are not licensed for use as your own branding.
