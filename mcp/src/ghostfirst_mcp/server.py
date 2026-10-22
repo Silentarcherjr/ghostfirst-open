@@ -154,6 +154,9 @@ def _fill(template: str, params: dict[str, Any]) -> str:
         elif key == "brand":
             safe[key] = value if isinstance(value, str) and value in BRANDS else "—"
         elif key in {"count", "seconds", "changed"}:
+            # The API sends some counts as decimal strings (e.g. seconds="3").
+            if isinstance(value, str) and re.fullmatch(r"\d{1,7}(\.\d{1,3})?", value):
+                value = float(value) if "." in value else int(value)
             safe[key] = str(value) if type(value) in {int, float} and math.isfinite(value) and 0 <= value <= 1000000 else "—"
         elif key == "credential":
             # Only fixed EN/ES credential labels may enter a sentence.
@@ -165,7 +168,10 @@ def _reasons(verdict: dict[str, Any], locale="en-US") -> list[Reason]:
     for finding in verdict.get("reasons", []):
         template = texts.table("FINDINGS", locale).get(finding.get("code", ""))
         text = _fill(template, finding.get("params", {})) if template else texts.fixed("Additional evidence.", locale)
-        out.append(Reason(code=finding["code"] if finding.get("code") in texts.FINDINGS else "unknown_evidence", severity=finding.get("severity") if finding.get("severity") in {"high", "medium", "low", "info"} else "info", text=text))
+        reason = Reason(code=finding["code"] if finding.get("code") in texts.FINDINGS else "unknown_evidence", severity=finding.get("severity") if finding.get("severity") in {"high", "medium", "low", "info"} else "info", text=text)
+        # A Deep Check reports the same finding once per visitor; say it once.
+        if not any(r.code == reason.code and r.text == reason.text for r in out):
+            out.append(reason)
     return out
 
 

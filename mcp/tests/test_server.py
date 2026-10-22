@@ -233,3 +233,13 @@ async def test_mcp_preserves_rule_verdict_despite_page_claims(state, rule):
 async def test_empty_deep_check_retains_missing_visitor_evidence():
     out = await call(build_server(fake_api([httpx.Response(200,json={'wisps':[], 'verdict':{'state':'caution'}})], [])), 'deep_check', 'https://fixture.example/')
     assert out['visitors'] == []  # Distinct from a single visit (None).
+
+
+def test_deep_check_reasons_are_deduplicated_and_string_seconds_render() -> None:
+    from ghostfirst_mcp import server
+    finding = {"code": "page.credentials_after_visual_change", "severity": "medium", "params": {"seconds": "3", "changed": "62"}}
+    out = server.deep_check_from_result({"verdict": {"state": "caution", "reasons": [finding, finding, finding]}, "wisps": []})
+    assert len(out.reasons) == 1
+    assert "(3 s after loading)" in out.reasons[0].text
+    bad = server._fill("{seconds} s", {"seconds": "3; drop"})
+    assert bad == "— s"
