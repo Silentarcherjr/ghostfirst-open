@@ -205,9 +205,13 @@ function bubble(who, text, details = [], verdict) {
   li.scrollIntoView({ block: 'nearest', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
 }
 
+let connectedStatus = null;
 function setState(state, status) {
   $('ring').dataset.state = state;
-  if (status) $('status').textContent = status;
+  if (status) {
+    $('status').textContent = status;
+    $('status').dataset.connected = String(!!connectedStatus && status === connectedStatus());
+  }
 }
 
 function log(direction, message) {
@@ -401,6 +405,14 @@ function applyLocale() {
   $('speak-label').textContent = tr('Speak answers aloud','Leer las respuestas en voz alta');
   $('mic').title = tr('Speak','Hablar');
   $('mic').setAttribute('aria-label', tr('Speak','Hablar'));
+  $('note').textContent = tr('Simulated voice assistant (Alexa+ track). Every answer comes from the GhostFirst MCP server over Streamable HTTP.', 'Asistente de voz simulado (track Alexa+). Cada respuesta viene del servidor MCP de GhostFirst por Streamable HTTP.');
+  $('phone-title').textContent = tr('Text from a family member','Mensaje de un familiar');
+  $('phone-text').textContent = tr('Can you check this link before I open it?','¿Puedes revisar este enlace antes de que lo abra?');
+  $('shared-label').textContent = tr('Link in the text message','Enlace del mensaje');
+  $('say-label').textContent = tr('Say or type','Di o escribe');
+  if ($('status').dataset.connected === 'true') $('status').textContent = connectedStatus();
+  $('wire-title').textContent = tr('MCP traffic','Tráfico MCP');
+  $('wire-hint').textContent = tr('What the assistant sends to the GhostFirst MCP server and gets back. Page text never reaches the assistant: only fixed sentences, host names and counts.', 'Lo que el asistente envía al servidor MCP de GhostFirst y lo que recibe. El texto de la página nunca llega al asistente: solo frases fijas, nombres de host y conteos.');
 }
 async function start() {
   $('locale').addEventListener('change', () => {
@@ -434,9 +446,10 @@ async function start() {
     const resource = await client.request('resources/read', {uri:'ui://ghostfirst/verdict'});
     const card = resource.contents.find((c) => c.mimeType === 'text/html;profile=mcp-app');
     if (card) { $('verdict-card').srcdoc = card.text; $('verdict-card').hidden = false; }
-    setState('idle', `Connected to ${init.serverInfo.title || init.serverInfo.name} · tools: ${tools.map((t) => t.name).join(', ')}`);
+    connectedStatus = () => `${tr('Connected to','Conectado a')} ${init.serverInfo.title || init.serverInfo.name} · ${tr('tools','herramientas')}: ${tools.map((t) => t.name).join(', ')}`;
+    setState('idle', connectedStatus());
   } catch (error) {
-    setState('idle', `Could not reach the MCP server: ${error.message}`);
+    setState('idle', `${tr('Could not reach the MCP server','No se pudo conectar con el servidor MCP')}: ${error.message}`);
   }
 }
 

@@ -12,13 +12,13 @@
 <body>
 <header class="bar">
   <span class="brand"><img src="/favicon.svg" alt="" width="28" height="28">GhostFirst Voice Check</span>
-  <span class="note">Simulated voice assistant (Alexa+ track). Every answer comes from the GhostFirst MCP server over Streamable HTTP.</span>
+  <span class="note" id="note">Simulated voice assistant (Alexa+ track). Every answer comes from the GhostFirst MCP server over Streamable HTTP.</span>
 </header>
 <main class="layout">
   <section class="device" aria-label="Voice assistant">
     <aside class="phone" aria-label="Sample phone text message">
-      <h2>Text from a family member</h2><p>Can you check this link before I open it?</p>
-      <label for="shared-url">Link in the text message</label>
+      <h2 id="phone-title">Text from a family member</h2><p id="phone-text">Can you check this link before I open it?</p>
+      <label for="shared-url" id="shared-label">Link in the text message</label>
       <input id="shared-url" type="url" value="https://ghostfirst-demo.example/" spellcheck="false">
       <button type="button" id="share">Share to GhostFirst</button>
       <button type="button" id="check-shared">Check shared link</button>
@@ -33,7 +33,7 @@
       <button type="button" id="no">No</button>
     </div>
     <form class="ask" id="ask" autocomplete="off">
-      <label class="sr" for="say">Say or type</label>
+      <label class="sr" for="say" id="say-label">Say or type</label>
       <input id="say" name="say" type="text" placeholder="Check this link: https://…" spellcheck="false">
       <button type="button" id="mic" class="mic" aria-pressed="false" title="Speak">🎙</button>
       <button type="submit" class="primary" id="ask-button">Ask</button>
@@ -45,8 +45,8 @@
     </div>
   </section>
   <section class="wire" aria-label="MCP traffic">
-    <h2>MCP traffic</h2>
-    <p class="hint">What the assistant sends to the GhostFirst MCP server and gets back. Page text never reaches the assistant: only fixed sentences, host names and counts.</p>
+    <h2 id="wire-title">MCP traffic</h2>
+    <p class="hint" id="wire-hint">What the assistant sends to the GhostFirst MCP server and gets back. Page text never reaches the assistant: only fixed sentences, host names and counts.</p>
     <ol class="log" id="log"></ol>
   </section>
 </main>
