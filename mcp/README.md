@@ -77,13 +77,16 @@ Missing visitors show that the site could not be reached. Ask “why?”, “wha
 should I do?” or “what did each visitor see?” (Spanish: “¿por qué?”, “¿qué
 hago?”, “¿qué vio cada visitante?”). Typed and recognised voice input use the
 same deterministic handler and the last result in RAM. Unrecognised questions
-prompt for a link. This is separate from the hosted demo below, which performs
-real scans and requires owner authorization for provider use.
+prompt for a link. The hosted demo below runs this same code and performs
+real scans.
 
 ## Try it (judges)
 
-**Task G is local and pending review.** The existing hosted build has not
-been updated with these changes. For a provider-free rehearsal:
+**Hosted (recommended):** <https://mcp.ghostfirst.com> runs the code in this
+repository, including the three-visitor tiles, follow-up questions and the
+EN/ES selector. Steps are below.
+
+**Offline rehearsal** (fixed fake evidence, no real scan):
 
 ```bash
 .venv/bin/python tool/fake_ui_server.py
@@ -93,7 +96,7 @@ Open <http://127.0.0.1:8799/>, press Share, then Check shared link (or say
 “check the link from my grandson’s text”). This uses fixed fake evidence,
 not a real scan. The EN/ES selector controls speech and request locale.
 
-**Existing hosted build:** open <https://mcp.ghostfirst.com> (the simulator; MCP endpoint
+**Hosted build:** open <https://mcp.ghostfirst.com> (the simulator; MCP endpoint
 `https://mcp.ghostfirst.com/mcp`).
 
 **Locally, against the hosted GhostFirst API** (needs

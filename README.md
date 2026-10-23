@@ -17,7 +17,7 @@ separable layers built on top of it.
 
 | Folder | What it is | Status |
 |---|---|---|
-| [`mcp/`](mcp/) | MCP server: a link-safety gate for AI agents and voice assistants (`check_link`, `deep_check`, `get_check_result`, `check_shared_link`), human-only consent, EN/es-US voice and inline MCP Apps card, over stdio or Streamable HTTP, with a voice-assistant simulator | Task A working locally, pending review; hosted instance is an earlier build at <https://mcp.ghostfirst.com> |
+| [`mcp/`](mcp/) | MCP server: a link-safety gate for AI agents and voice assistants (`check_link`, `deep_check`, `get_check_result`, `check_shared_link`), human-only consent, EN/es-US voice and inline MCP Apps card, over stdio or Streamable HTTP, with a voice-assistant simulator | Working; the same code is live at <https://mcp.ghostfirst.com> |
 | `lens/` | OpenCV checks (QR sticker overlay, visual timeline evaluation) | Planned |
 
 Design rule for every layer: **AI explains, deterministic rules decide.**
