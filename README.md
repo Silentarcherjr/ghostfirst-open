@@ -22,9 +22,19 @@ separable layers built on top of it.
 
 Design rule for every layer: **AI explains, deterministic rules decide.**
 
-**Try Task A locally:** run the offline fixture server or the MCP server and its
-voice-assistant simulator locally in a few commands; see
-[`mcp/README.md` → Try it](mcp/README.md#try-it-judges).
+## What you can reproduce from this repo
+
+1. **The whole MCP layer runs from this code:** server, voice simulator, MCP
+   Apps card, consent flow and EN/ES wording.
+2. **Against the hosted GhostFirst API, with no credentials:** run the server
+   locally and it calls `https://ghostfirst.com`, or use the live copy at
+   <https://mcp.ghostfirst.com>. The API performs the real browser visits.
+3. **Fully offline, with no GhostFirst backend:** `tool/fake_ui_server.py`
+   serves the same simulator with fixed fake evidence, and the automated tests
+   use mocked API responses. Offline runs show the MCP behavior; real scan
+   results come only from the hosted API.
+
+Commands: [`mcp/README.md` → Try it](mcp/README.md#try-it-judges).
 
 The simulator has a session-only shared-links inbox: Share, ask without URL
 dictation, then hear complete evidence or use the card. Jobs acknowledge
