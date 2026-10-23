@@ -261,7 +261,7 @@ function askHuman(params) {
   const keys = Object.keys(props);
   const field = keys.length === 1 && props[keys[0]].type === 'boolean' ? keys[0] : null;
   if (!field) return Promise.resolve({ action: 'decline' });
-  renderCard({locale,human_question:params.message,agent_guidance:params.message});
+  renderCard({locale,human_question:params.message});
   bubble('assistant', params.message);
   say(params.message);
   setState('idle', tr('Waiting for your answer','Esperando tu respuesta'));
